@@ -1,0 +1,15 @@
+# 项目根目录的 Git 忽略规则
+
+# Cursor 编辑器配置
+.cursor/
+
+# PostgreSQL 数据目录
+postgres-data/
+
+# 临时目录
+dir/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+

@@ -11,7 +11,7 @@ public interface Game2048Mapper extends BaseMapper<Game2048> {
         @Insert("INSERT INTO game2048 (user_id, difficulty, max_tile, moves_count, duration, status, game_data, score) "
                         +
                         "VALUES (#{insert.user_id}, #{insert.difficulty}, #{insert.max_tile}, #{insert.moves_count}, " +
-                        "#{insert.duration}, #{insert.status}, #{insert.game_data}, #{insert.score})")
+                        "#{insert.duration}, #{insert.status}, CAST(#{insert.game_data} AS jsonb), #{insert.score})")
         int insert2048Record(@Param("insert") Map<String, Object> insert);
 
         @Select("SELECT * FROM game2048 WHERE user_id = #{userId} AND status = 0")
@@ -20,16 +20,16 @@ public interface Game2048Mapper extends BaseMapper<Game2048> {
         @Update("UPDATE game2048 SET difficulty = #{update.difficulty}, max_tile = #{update.max_tile}, " +
                         "moves_count = #{update.moves_count}, duration = #{update.duration}, status = #{update.status}, "
                         +
-                        "game_data = #{update.game_data}, score = #{update.score} " +
+                        "game_data = CAST(#{update.game_data} AS jsonb), score = #{update.score} " +
                         "WHERE id = #{update.id}")
         int update2048Record(@Param("update") Map<String, Object> update);
 
         // 分页查询用户游戏记录
         @Select("SELECT * FROM game2048 WHERE user_id = #{userId} " +
-                        "ORDER BY create_time DESC LIMIT #{offset}, #{size}")
+                        "ORDER BY create_time DESC LIMIT #{size} OFFSET #{offset}")
         List<Game2048> selectByUserIdWithPage(@Param("userId") Long userId,
-                                              @Param("offset") Integer offset,
-                                              @Param("size") Integer size);
+                        @Param("offset") Integer offset,
+                        @Param("size") Integer size);
 
         // 统计用户游戏总数
         @Select("SELECT COUNT(*) FROM game2048 WHERE user_id = #{userId}")

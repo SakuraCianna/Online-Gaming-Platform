@@ -4,7 +4,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.game.exception.BusinessException;
 import com.game.mapper.FriendMapper;
 import com.game.vo.FriendVO;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,8 @@ import java.util.Map;
 @Transactional
 public class FriendService {
 
+    private static final Logger log = LoggerFactory.getLogger(FriendService.class);
+
     private final FriendMapper friendMapper;
     // 使用 StringRedisTemplate：读取用户状态,与 UserStateService 保持一致
     private final StringRedisTemplate stringRedisTemplate;
@@ -32,6 +35,7 @@ public class FriendService {
     }
 
     public Map<String, Object> getAllFriend(long id, int page, int pageSize) {
+        log.info("开始查询好友列表: userId={}, page={}, pageSize={}", id, page, pageSize);
         Map<String, Object> result = new HashMap<>();
         Page<FriendVO> mpPage = new Page<>(page, pageSize);
 
@@ -50,13 +54,16 @@ public class FriendService {
             result.put("data", mpPage.getRecords());
             result.put("total", mpPage.getTotal());
             result.put("success", true);
+            log.info("好友列表查询成功: userId={}, 共{}条记录", id, total);
         } catch (Exception e) {
-            throw new BusinessException(500, "分页查询失败");
+            log.error("分页查询失败: userId={}, page={}, pageSize={}, 错误信息: {}", id, page, pageSize, e.getMessage(), e);
+            throw new BusinessException(500, "分页查询失败: " + e.getMessage());
         }
         return result;
     }
 
     public Map<String, Object> searchFriend(long userId, String keyword, int page, int pageSize) {
+        log.info("开始搜索好友: userId={}, keyword={}, page={}, pageSize={}", userId, keyword, page, pageSize);
         Map<String, Object> result = new HashMap<>();
         Page<FriendVO> mpPage = new Page<>(page, pageSize);
 
@@ -72,18 +79,22 @@ public class FriendService {
             result.put("data", data);
             result.put("success", true);
             result.put("code", 200);
+            log.info("搜索好友成功: userId={}, keyword={}, 共{}条记录", userId, keyword, mpPage.getTotal());
         } catch (Exception e) {
-            throw new BusinessException(500, "搜索失败");
+            log.error("搜索好友失败: userId={}, keyword={}, 错误信息: {}", userId, keyword, e.getMessage(), e);
+            throw new BusinessException(500, "搜索失败: " + e.getMessage());
         }
         return result;
     }
 
     public Map<String, Object> addFriend(long userId, long friendId, String message) {
+        log.info("开始添加好友: userId={}, friendId={}", userId, friendId);
         Map<String, Object> result = new HashMap<>();
         try {
             if (friendMapper.existFriendData(friendId, userId, 0)) {
                 result.put("success", false);
                 result.put("message", "已发送过好友请求,请勿重复添加!");
+                log.warn("重复发送好友请求: userId={}, friendId={}", userId, friendId);
                 return result;
             }
             if (friendMapper.addFriend(friendId, userId, message) > 0) {
@@ -95,17 +106,21 @@ public class FriendService {
                 notifyMsg.put("friendId", friendId);
                 notifyMsg.put("message", message);
                 messagingTemplate.convertAndSend("/topic/friendRequest/" + friendId, notifyMsg);
+                log.info("添加好友成功: userId={}, friendId={}", userId, friendId);
             } else {
                 result.put("success", false);
                 result.put("message", "添加好友失败");
+                log.warn("添加好友失败(数据库返回0): userId={}, friendId={}", userId, friendId);
             }
         } catch (Exception e) {
-            throw new BusinessException(500, "添加好友失败,请联系管理员");
+            log.error("添加好友异常: userId={}, friendId={}, 错误信息: {}", userId, friendId, e.getMessage(), e);
+            throw new BusinessException(500, "添加好友失败: " + e.getMessage());
         }
         return result;
     }
 
     public Map<String, Object> confirmFriend(long userId, long friendId, int status) {
+        log.info("开始处理好友请求: userId={}, friendId={}, status={}", userId, friendId, status);
         Map<String, Object> result = new HashMap<>();
         // 确认好友请求
         try {
@@ -113,6 +128,7 @@ public class FriendService {
                 if (friendMapper.isFriend(userId, friendId)) {
                     result.put("success", false);
                     result.put("message", "你们已经是好友了");
+                    log.warn("重复确认好友关系: userId={}, friendId={}", userId, friendId);
                     return result;
                 }
                 // 更新现有请求状态为已接受
@@ -125,16 +141,21 @@ public class FriendService {
                     notifyMsg.put("friendId", friendId); // 谁发起的
                     notifyMsg.put("action", "confirm");
                     messagingTemplate.convertAndSend("/topic/friendRequest/" + friendId, notifyMsg);
+                    log.info("接受好友请求成功: userId={}, friendId={}", userId, friendId);
                 } else {
+                    log.error("更新好友状态失败: userId={}, friendId={}", userId, friendId);
                     throw new BusinessException(500, "数据库错误");
                 }
             } else if (status == 2) { // 拒绝好友请求
                 friendMapper.deleteFriend(userId, friendId);
                 result.put("success", true);
                 result.put("message", "已拒绝请求");
+                log.info("拒绝好友请求成功: userId={}, friendId={}", userId, friendId);
             }
         } catch (Exception e) {
-            throw new BusinessException(500, "处理好友请求失败,请联系管理员");
+            log.error("处理好友请求失败: userId={}, friendId={}, status={}, 错误信息: {}", userId, friendId, status, e.getMessage(),
+                    e);
+            throw new BusinessException(500, "处理好友请求失败: " + e.getMessage());
         }
         return result;
     }

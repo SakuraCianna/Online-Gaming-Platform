@@ -53,7 +53,7 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(400, "用户不存在");
         }
-        if (userMapper.findUsername(username, user.getEmail()) > 0) {
+        if (Boolean.TRUE.equals(userMapper.findUsername(username, user.getEmail()))) {
             throw new BusinessException(400, "该用户名已存在");
         }
         if (user.getPassword() != null && !user.getPassword().isEmpty()) {

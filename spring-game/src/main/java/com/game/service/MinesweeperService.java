@@ -2,6 +2,8 @@ package com.game.service;
 
 import com.game.exception.BusinessException;
 import com.game.mapper.MinesweeperMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.game.entity.Minesweeper;
@@ -14,6 +16,8 @@ import java.util.Map;
 @Transactional
 public class MinesweeperService {
 
+    private static final Logger log = LoggerFactory.getLogger(MinesweeperService.class);
+
     private final MinesweeperMapper minesweeperMapper;
     private final GameRecordService gameRecordService;
 
@@ -23,6 +27,7 @@ public class MinesweeperService {
     }
 
     public Map<String, Object> saveData(Map<String, Object> request) {
+        log.info("开始保存扫雷游戏数据: userId={}", request.get("user_id"));
         Map<String, Object> result = new HashMap<>();
 
         Long userId = ((Number) request.get("user_id")).longValue();
@@ -53,27 +58,33 @@ public class MinesweeperService {
 
                 // 失效缓存
                 gameRecordService.invalidateCache(userId, "minesweeper");
+                log.info("扫雷游戏保存成功: userId={}", userId);
             }
         } catch (Exception e) {
-            throw new BusinessException(500, "保存游戏数据失败,请联系管理员");
+            log.error("保存扫雷游戏数据失败: userId={}, 错误信息: {}", userId, e.getMessage(), e);
+            throw new BusinessException(500, "保存游戏数据失败: " + e.getMessage());
         }
         return result;
     }
 
     public Map<String, Object> deleteById(long id) {
+        log.info("开始删除扫雷游戏记录: id={}", id);
         Map<String, Object> result = new HashMap<>();
         try {
             if (minesweeperMapper.deleteById(id) == 1) {
                 result.put("success", true);
                 result.put("message", "游戏删除成功");
+                log.info("扫雷游戏删除成功: id={}", id);
             }
         } catch (Exception e) {
-            throw new BusinessException(500, "游戏删除失败");
+            log.error("删除扫雷游戏失败: id={}, 错误信息: {}", id, e.getMessage(), e);
+            throw new BusinessException(500, "游戏删除失败: " + e.getMessage());
         }
         return result;
     }
 
     public Map<String, Object> updateData(Map<String, Object> request) {
+        log.info("开始更新扫雷游戏数据: id={}", request.get("id"));
         Map<String, Object> result = new HashMap<>();
 
         // 获取id用于更新
@@ -102,12 +113,15 @@ public class MinesweeperService {
             if (minesweeperMapper.updateMinesweeperRecord(update) == 1) {
                 result.put("success", true);
                 result.put("message", "游戏更新成功");
+                log.info("扫雷游戏更新成功: id={}", id);
             } else {
                 result.put("success", false);
                 result.put("message", "游戏记录不存在或更新失败");
+                log.warn("扫雷游戏更新失败(记录不存在): id={}", id);
             }
         } catch (Exception e) {
-            throw new BusinessException(500, "更新游戏数据失败,请联系管理员");
+            log.error("更新扫雷游戏数据失败: id={}, 错误信息: {}", id, e.getMessage(), e);
+            throw new BusinessException(500, "更新游戏数据失败: " + e.getMessage());
         }
         return result;
     }
@@ -122,6 +136,7 @@ public class MinesweeperService {
      */
     @Transactional(readOnly = true)
     public Map<String, Object> getRecordsByUserId(Long userId, Integer page, Integer size) {
+        log.info("查询扫雷游戏记录: userId={}, page={}, size={}", userId, page, size);
         Map<String, Object> result = new HashMap<>();
 
         // 参数校验
@@ -158,8 +173,10 @@ public class MinesweeperService {
             result.put("page", page);
             result.put("size", size);
             result.put("totalPages", total != null ? (int) Math.ceil((double) total / size) : 0);
+            log.info("扫雷游戏记录查询成功: userId={}, 共{}条记录", userId, total);
         } catch (Exception e) {
-            throw new BusinessException(500, "查询游戏记录失败：" + e.getMessage());
+            log.error("查询扫雷游戏记录失败: userId={}, 错误信息: {}", userId, e.getMessage(), e);
+            throw new BusinessException(500, "查询游戏记录失败: " + e.getMessage());
         }
 
         return result;
