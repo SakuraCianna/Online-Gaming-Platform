@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏平台 - 邮箱验证码</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: table;
+            width: 100%;
+            height: 100vh;
+        }
+
+        .email-wrapper {
+            display: table-cell;
+            vertical-align: middle;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .email-container {
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 550px;
+            width: 100%;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .logo-section {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .game-icon {
+            font-size: 3rem;
+            margin-right: 15px;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .title {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin: 0;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            margin-top: 10px;
+        }
+
+        .content {
+            padding: 40px 30px;
+        }
+
+        .welcome-text {
+            font-size: 1.2rem;
+            color: #555;
+            margin-bottom: 30px;
+            text-align: center;
+            line-height: 1.8;
+        }
+
+        .verification-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .verification-label {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .verification-code {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+            letter-spacing: 8px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+            display: inline-block;
+            user-select: all;
+        }
+
+        .expire-info {
+            font-size: 0.9rem;
+            color: #ff6b6b;
+            margin-top: 15px;
+            font-weight: 600;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 25px 30px;
+            text-align: center;
+            color: #666;
+        }
+
+        .footer-text {
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+        }
+
+        .warning-text {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: #999;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 480px) {
+            .email-wrapper {
+                padding: 10px;
+            }
+
+            .email-container {
+                border-radius: 15px;
+            }
+
+            .header {
+                padding: 30px 20px;
+            }
+
+            .content {
+                padding: 30px 20px;
+            }
+
+            .title {
+                font-size: 1.8rem;
+            }
+
+            .verification-code {
+                font-size: 2rem;
+                letter-spacing: 5px;
+            }
+        }
+
+        /* 兼容性更好的居中方案 */
+        @media screen and (max-width: 600px) {
+            body {
+                display: block;
+                padding: 10px;
+            }
+
+            .email-wrapper {
+                display: block;
+                padding: 0;
+            }
+
+            .email-container {
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="email-wrapper">
+    <div class="email-container">
+        <!-- 头部 -->
+        <div class="header">
+            <div class="logo-section">
+                <div class="game-icon">🎮</div>
+                <h1 class="title">游戏平台</h1>
+            </div>
+            <p class="subtitle">邮箱验证码</p>
+        </div>
+
+        <!-- 内容 -->
+        <div class="content">
+            <div class="welcome-text">
+                亲爱的 <span th:text="${username}">玩家</span>，欢迎来到我们的游戏世界！<br>
+                为了确保您的账户安全，请使用以下验证码完成注册。
+            </div>
+
+            <!-- 验证码区域 -->
+            <div class="verification-box">
+                <div class="verification-label">您的验证码是：</div>
+                <div class="verification-code" th:text="${verificationCode}">123456</div>
+                <div class="expire-info">⚠️ 验证码有效期为5分钟，请尽快使用</div>
+            </div>
+        </div>
+
+        <!-- 底部 -->
+        <div class="footer">
+            <div class="footer-text">感谢您选择我们的游戏平台</div>
+            <div class="warning-text">
+                此邮件由系统自动发送，请勿回复。<br>
+                如果这不是您的操作，请忽略此邮件。
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
