@@ -3,9 +3,7 @@ import 'dayjs/locale/zh-cn'
 
 dayjs.locale('zh-cn')
 
-/**
- * 统一时间格式化工具
- */
+export { default as dayjs } from 'dayjs'
 
 // 格式化为标准日期时间
 export function formatTime(time, format = 'YYYY-MM-DD HH:mm:ss') {
@@ -34,7 +32,7 @@ export function formatRelativeTime(time) {
     return formatDate(time)
 }
 
-// 格式化游戏时长（秒 -> 可读格式）
+// 格式化游戏时长
 export function formatDuration(seconds) {
     if (!seconds || seconds < 0) return '0秒'
 
@@ -51,6 +49,31 @@ export function formatDuration(seconds) {
     }
 }
 
-// 导出dayjs实例，供其他地方使用
-export { dayjs }
+// 简短时长格式（用于统计卡片等空间有限的地方）
+export function formatShortDuration(seconds) {
+    if (!seconds || seconds < 0) return '0s'
 
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`
+    } else {
+        return `${secs}s`
+    }
+}
+
+// 判断是否是今天
+export function isToday(time) {
+    if (!time) return false
+    return dayjs(time).isSame(dayjs(), 'day')
+}
+
+// 判断是否是本周
+export function isThisWeek(time) {
+    if (!time) return false
+    return dayjs(time).isSame(dayjs(), 'week')
+}

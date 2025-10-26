@@ -1,12 +1,15 @@
 package com.game.service;
 
+import com.game.event.GameEndEvent;
 import com.game.exception.BusinessException;
 import com.game.mapper.Game2048Mapper;
 import com.game.mapper.GomokuMapper;
 import com.game.mapper.MinesweeperMapper;
 import com.game.mapper.TankBattleMapper;
 import org.redisson.api.RBloomFilter;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -341,5 +344,28 @@ public class GameRecordService {
         }
 
         return result;
+    }
+
+    /**
+     * 监听游戏结束事件，自动失效缓存
+     * 使用@Async异步处理，不阻塞主流程
+     * 支持单人和多人游戏（1 ~ N个玩家）
+     * 
+     * @param event 游戏结束事件
+     */
+    @Async
+    @EventListener
+    public void handleGameEndEvent(GameEndEvent event) {
+        try {
+            // 遍历所有玩家ID，失效缓存
+            for (Long playerId : event.getPlayerIds()) {
+                if (playerId != null && playerId > 0) {
+                    invalidateCache(playerId, event.getGameType());
+                }
+            }
+        } catch (Exception e) {
+            // 缓存失效失败不影响业务，只记录日志
+            System.err.println("处理游戏结束事件失败：" + e.getMessage());
+        }
     }
 }

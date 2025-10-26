@@ -712,7 +712,7 @@ const handleForgotPassword = async () => {
   overflow: hidden;
 }
 
-/* 背景动画 */
+/* 背景动画 - 优化版 */
 .background-animation {
   position: absolute;
   top: 0;
@@ -732,7 +732,8 @@ const handleForgotPassword = async () => {
   position: absolute;
   border-radius: 50%;
   background: linear-gradient(45deg, rgba(255, 107, 107, 0.1), rgba(78, 205, 196, 0.1));
-  animation: float 6s ease-in-out infinite;
+  will-change: transform;
+  animation: float 8s ease-in-out infinite;
 }
 
 .shape-1 {
@@ -741,6 +742,7 @@ const handleForgotPassword = async () => {
   top: 20%;
   left: 10%;
   animation-delay: 0s;
+  animation-name: float1;
 }
 
 .shape-2 {
@@ -749,6 +751,7 @@ const handleForgotPassword = async () => {
   top: 60%;
   right: 15%;
   animation-delay: 2s;
+  animation-name: float2;
 }
 
 .shape-3 {
@@ -757,6 +760,7 @@ const handleForgotPassword = async () => {
   top: 80%;
   left: 20%;
   animation-delay: 4s;
+  animation-name: float3;
 }
 
 .shape-4 {
@@ -765,6 +769,7 @@ const handleForgotPassword = async () => {
   top: 10%;
   right: 30%;
   animation-delay: 1s;
+  animation-name: float4;
 }
 
 .shape-5 {
@@ -773,21 +778,87 @@ const handleForgotPassword = async () => {
   bottom: 20%;
   right: 10%;
   animation-delay: 3s;
+  animation-name: float5;
 }
 
-@keyframes float {
+/* 不同的浮动动画路径 - 使用transform优化性能 */
+@keyframes float1 {
 
   0%,
   100% {
-    transform: translateY(0px) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg) scale(1);
   }
 
-  50% {
-    transform: translateY(-20px) rotate(180deg);
+  33% {
+    transform: translate(15px, -25px) rotate(120deg) scale(1.1);
+  }
+
+  66% {
+    transform: translate(-10px, 15px) rotate(240deg) scale(0.9);
   }
 }
 
-/* 主卡片 */
+@keyframes float2 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+
+  33% {
+    transform: translate(-20px, 20px) rotate(-90deg) scale(0.85);
+  }
+
+  66% {
+    transform: translate(15px, -15px) rotate(-180deg) scale(1.15);
+  }
+}
+
+@keyframes float3 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+
+  50% {
+    transform: translate(10px, -30px) rotate(180deg) scale(1.2);
+  }
+}
+
+@keyframes float4 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+
+  25% {
+    transform: translate(-15px, 10px) rotate(90deg) scale(0.9);
+  }
+
+  75% {
+    transform: translate(20px, -10px) rotate(270deg) scale(1.1);
+  }
+}
+
+@keyframes float5 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+
+  40% {
+    transform: translate(10px, 15px) rotate(-120deg) scale(1.15);
+  }
+
+  80% {
+    transform: translate(-15px, -10px) rotate(-240deg) scale(0.85);
+  }
+}
+
+/* 主卡片 - 优化动画 */
 .auth-card {
   background: rgba(255, 255, 255, 0.95);
   -webkit-backdrop-filter: blur(20px);
@@ -799,18 +870,18 @@ const handleForgotPassword = async () => {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
   position: relative;
   z-index: 1;
-  animation: slideIn 0.6s ease-out;
+  animation: slideIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(30px);
+    transform: translateY(50px) scale(0.9);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -897,20 +968,40 @@ const handleForgotPassword = async () => {
   border: 2px solid #e1e5e9;
   border-radius: 10px;
   font-size: 1rem;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: rgba(255, 255, 255, 0.9);
 }
 
 .form-input:focus {
   outline: none;
   border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 3px rgba(102, 126, 234, 0.1),
+    0 4px 12px rgba(102, 126, 234, 0.15);
+  transform: translateY(-2px) scale(1.01);
+  background: rgba(255, 255, 255, 1);
 }
 
 .form-input.error {
   border-color: #ff6b6b;
   box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+  animation: shakeError 0.5s ease-in-out;
+}
+
+@keyframes shakeError {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-8px);
+  }
+
+  75% {
+    transform: translateX(8px);
+  }
 }
 
 /* 验证码样式 */
@@ -1050,6 +1141,22 @@ const handleForgotPassword = async () => {
 
 .hcaptcha-wrapper>div {
   margin: 0 auto;
+}
+
+/* 性能优化 - 减少动画偏好设置支持 */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .shape {
+    animation: none;
+  }
 }
 
 /* 响应式设计 */

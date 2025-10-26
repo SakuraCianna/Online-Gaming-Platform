@@ -1,3 +1,39 @@
+/* ==================== CSS 变量定义 ==================== */
+:root {
+  /* 动画时长 */
+  --duration-fast: 0.15s;
+  --duration-base: 0.3s;
+  --duration-slow: 0.5s;
+  --duration-slower: 0.8s;
+
+  /* 缓动函数 */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);          /* Material Design 标准 */
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);     /* 弹性效果 */
+  --ease-in-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);  /* 平滑进出 */
+  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-in: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+
+  /* 主题颜色 */
+  --color-primary: #667eea;
+  --color-secondary: #764ba2;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #06b6d4;
+
+  /* 阴影 */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.2);
+
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -45,10 +81,38 @@ textarea:focus {
   user-select: none;
 }
 
-/* 动画类 */
-.fade-enter-active,
+/* ==================== 全局性能优化 ==================== */
+
+/* GPU 加速优化 - 仅对需要动画的元素使用 */
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-opacity {
+  will-change: opacity;
+}
+
+/* 动画结束后释放 will-change */
+.will-change-auto {
+  will-change: auto;
+}
+
+/* 硬件加速 */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* ==================== 通用动画类 ==================== */
+
+/* 淡入淡出 - 使用 CSS 变量 */
+.fade-enter-active {
+  transition: opacity var(--duration-base) var(--ease-smooth);
+}
+
 .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity var(--duration-fast) var(--ease-smooth);
 }
 
 .fade-enter-from,
@@ -56,9 +120,10 @@ textarea:focus {
   opacity: 0;
 }
 
+/* 滑动动画 - 使用 CSS 变量 */
 .slide-enter-active,
 .slide-leave-active {
-  transition: transform 0.3s ease;
+  transition: transform var(--duration-base) var(--ease-smooth);
 }
 
 .slide-enter-from {
@@ -69,8 +134,249 @@ textarea:focus {
   transform: translateX(100%);
 }
 
+/* 缩放动画 */
+.scale-enter-active,
+.scale-leave-active {
+  transition: 
+    opacity var(--duration-base) var(--ease-smooth),
+    transform var(--duration-base) var(--ease-smooth);
+}
+
+.scale-enter-from {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.scale-leave-to {
+  opacity: 0;
+  transform: scale(1.1);
+}
+
+/* 弹跳进入动画 */
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.bounce-in {
+  animation: bounceIn var(--duration-slower) var(--ease-bounce);
+}
+
+/* 从下方滑入 */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-in-up {
+  animation: slideInUp var(--duration-base) var(--ease-smooth);
+}
+
+/* 从左侧滑入 */
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-in-left {
+  animation: slideInLeft var(--duration-base) var(--ease-smooth);
+}
+
+/* ==================== 可访问性支持 ==================== */
+
+/* 减少动画偏好设置支持 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  :root {
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* ==================== 通用工具类 ==================== */
+
+/* 平滑过渡 */
+.transition-smooth {
+  transition: all var(--duration-base) var(--ease-smooth);
+}
+
+.transition-fast {
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.transition-slow {
+  transition: all var(--duration-slow) var(--ease-smooth);
+}
+
+/* Hover 提升效果 */
+.hover-lift {
+  transition: transform var(--duration-base) var(--ease-smooth);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+}
+
+/* Hover 缩放效果 */
+.hover-scale {
+  transition: transform var(--duration-base) var(--ease-smooth);
+}
+
+.hover-scale:hover {
+  transform: scale(1.05);
+}
+
+/* 阴影工具类 */
+.shadow-sm {
+  box-shadow: var(--shadow-sm);
+}
+
+.shadow-md {
+  box-shadow: var(--shadow-md);
+}
+
+.shadow-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+.shadow-xl {
+  box-shadow: var(--shadow-xl);
+}
+
+/* 圆角工具类 */
+.rounded-sm {
+  border-radius: var(--radius-sm);
+}
+
+.rounded-md {
+  border-radius: var(--radius-md);
+}
+
+.rounded-lg {
+  border-radius: var(--radius-lg);
+}
+
+.rounded-xl {
+  border-radius: var(--radius-xl);
+}
+
+/* ==================== 加载动画 ==================== */
+
+/* 旋转加载 */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 骨架屏加载 */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ==================== 图标样式 ==================== */
+
 i[class^="icon-"], i[class*=" icon-"] {
   font-style: normal;
   line-height: 1;
   display: inline-block;
 }
+
+/* ==================== 性能优化提示 ==================== */
+
+/*
+使用指南：
+
+1. 动画时长：
+   - 快速交互：var(--duration-fast) - 0.15s
+   - 标准动画：var(--duration-base) - 0.3s  
+   - 慢速动画：var(--duration-slow) - 0.5s
+   - 特殊效果：var(--duration-slower) - 0.8s
+
+2. 缓动函数：
+   - 平滑标准：var(--ease-smooth) - Material Design
+   - 弹性效果：var(--ease-bounce) - 回弹效果
+   - 平滑进出：var(--ease-in-out) - 自然过渡
+
+3. 性能建议：
+   - 优先使用 transform 和 opacity
+   - 谨慎使用 will-change（动画时启用，结束释放）
+   - 避免同时动画大量元素
+   - 使用 GPU 加速类（.gpu-accelerated）
+
+4. 可访问性：
+   - 系统会自动处理 prefers-reduced-motion
+   - 支持高对比度模式
+*/

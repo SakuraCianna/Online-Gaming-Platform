@@ -8,14 +8,15 @@ import com.game.config.ZhipuAiUtil;
 import com.game.entity.GameRoom;
 import com.game.entity.Gomoku;
 import com.game.entity.RoomPlayer;
+import com.game.event.GameEndEvent;
 import com.game.exception.BusinessException;
 import com.game.mapper.GameRoomMapper;
 import com.game.mapper.GomokuMapper;
 import com.game.mapper.RoomPlayerMapper;
 import com.game.vo.PointVO;
-import lombok.Setter;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -67,14 +68,13 @@ public class GomokuService {
     private final ZhipuAiUtil zhipuAiUtil;
     private final SimpMessagingTemplate messagingTemplate;
     private final RedisKeyManager redisKeyManager;
-    // Setter注入，避免循环依赖
-    @Setter
-    private GameRecordService gameRecordService; // 延迟注入，避免循环依赖
+    private final ApplicationEventPublisher eventPublisher;
 
     public GomokuService(RedisTemplate<String, Object> redisTemplate, GomokuMapper gomokuMapper,
             GameRoomMapper gameRoomMapper, RoomPlayerMapper roomPlayerMapper, ObjectMapper objectMapper,
             RedissonClient redissonClient, ZhipuAiUtil zhipuAiUtil,
-            SimpMessagingTemplate messagingTemplate, RedisKeyManager redisKeyManager) {
+            SimpMessagingTemplate messagingTemplate, RedisKeyManager redisKeyManager,
+            ApplicationEventPublisher eventPublisher) {
         this.redisTemplate = redisTemplate;
         this.gomokuMapper = gomokuMapper;
         this.gameRoomMapper = gameRoomMapper;
@@ -84,6 +84,7 @@ public class GomokuService {
         this.zhipuAiUtil = zhipuAiUtil;
         this.messagingTemplate = messagingTemplate;
         this.redisKeyManager = redisKeyManager;
+        this.eventPublisher = eventPublisher;
     }
 
     public Map<String, Object> startGame(String roomCode, Map<String, Object> request) {
@@ -360,15 +361,12 @@ public class GomokuService {
                 roomPlayerMapper.insert(player);
             }
 
-            // 失效玩家缓存（两个玩家都需要失效）
-            if (gameRecordService != null) {
-                if (gomoku.getPlayer1Id() != null) {
-                    gameRecordService.invalidateCache(gomoku.getPlayer1Id(), "gomoku");
-                }
-                if (gomoku.getPlayer2Id() != null) {
-                    gameRecordService.invalidateCache(gomoku.getPlayer2Id(), "gomoku");
-                }
-            }
+            // 发布游戏结束事件（异步处理缓存失效）
+            eventPublisher.publishEvent(new GameEndEvent(
+                    this,
+                    gomoku.getPlayer1Id(),
+                    "gomoku",
+                    gomoku.getPlayer2Id()));
 
             // 删除Redis中的游戏数据
             redisTemplate.delete(roomKey);
