@@ -6,9 +6,12 @@
     <div class="main" ref="mainContent">
       <div class="main-content">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
+          <!-- 添加 keep-alive 缓存常用页面，提升切换性能 -->
+          <keep-alive :include="['GameCenter', 'GameRecords', 'Friends', 'GameRooms', 'Leaderboard', 'UserSettings']">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" :key="route.path" />
+            </transition>
+          </keep-alive>
         </router-view>
       </div>
     </div>
@@ -60,10 +63,10 @@ function initAnimation() {
   // 设置初始状态
   gsap.set(sideBar.value, { x: -280, opacity: 0 })
   gsap.set(mainContent.value, { x: 100, opacity: 0 })
-  
+
   // 创建时间轴
   const tl = gsap.timeline()
-  
+
   // 侧边栏滑入动画
   tl.to(sideBar.value, {
     x: 0,
@@ -71,7 +74,7 @@ function initAnimation() {
     duration: 0.8,
     ease: "power2.out"
   })
-  
+
   // 主内容区域滑入动画
   tl.to(mainContent.value, {
     x: 0,
@@ -79,35 +82,22 @@ function initAnimation() {
     duration: 0.8,
     ease: "power2.out"
   }, "-=0.4") // 稍微重叠，创造流畅效果
-  
+
   // 添加一些弹性效果
   tl.to([sideBar.value, mainContent.value], {
     scale: 1.02,
     duration: 0.1,
     ease: "power2.out"
   })
-  .to([sideBar.value, mainContent.value], {
-    scale: 1,
-    duration: 0.1,
-    ease: "power2.out"
-  })
+    .to([sideBar.value, mainContent.value], {
+      scale: 1,
+      duration: 0.1,
+      ease: "power2.out"
+    })
 }
 
-// 页面切换时的动画
-function animatePageTransition() {
-  const mainContent = document.querySelector('.main-content')
-  if (mainContent) {
-    gsap.fromTo(mainContent, 
-      { opacity: 0, y: 20 },
-      { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }
-    )
-  }
-}
-
-// 监听路由变化，添加页面切换动画
-watch(() => route.path, () => {
-  setTimeout(animatePageTransition, 100)
-})
+// 注意：页面切换动画已由 CSS transition 处理，不需要重复的 GSAP 动画
+// 移除了冲突的 animatePageTransition 以提升性能
 </script>
 
 <style scoped>
@@ -159,8 +149,13 @@ watch(() => route.path, () => {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .side {
@@ -246,20 +241,27 @@ watch(() => route.path, () => {
   height: 100vh;
 }
 
-/* 页面切换动画 */
-.fade-enter-active,
+/* 页面切换动画 - 使用优化的 cubic-bezier 曲线 */
+.fade-enter-active {
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .fade-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 1, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 1, 1);
 }
 
 .fade-enter-from {
   opacity: 0;
-  transform: translateX(20px);
+  transform: translateY(10px);
+  /* 向上滑入更自然 */
 }
 
 .fade-leave-to {
   opacity: 0;
-  transform: translateX(-20px);
+  transform: translateY(-5px);
+  /* 减小位移距离 */
 }
 
 /* 响应式设计 */
@@ -267,30 +269,31 @@ watch(() => route.path, () => {
   .user-layout {
     flex-direction: column;
   }
-  
+
   .side {
     height: auto;
   }
-  
+
   .main-header {
     padding: 15px 20px;
   }
-  
+
   .page-title {
     font-size: 24px;
   }
-  
+
   .main-content {
     padding: 20px;
-    height: calc(100vh - 120px); /* 移动端调整高度 */
+    height: calc(100vh - 120px);
+    /* 移动端调整高度 */
   }
-  
+
   /* 移动端动画调整 */
   .loading-spinner {
     width: 40px;
     height: 40px;
   }
-  
+
   .loading-text {
     font-size: 16px;
   }

@@ -28,14 +28,13 @@ public class SecurityConfig {
                         .requestMatchers("/user/login", "/user/register", "/user/**").permitAll()
                         .requestMatchers("/api/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
-                        .anyRequest().authenticated()
-                )
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        .anyRequest().authenticated())
                 .formLogin(AbstractHttpConfigurer::disable)
                 // 添加安全响应头
                 .headers(headers -> headers
                         .contentTypeOptions(withDefaults())
-                        .frameOptions(withDefaults())
-                );
+                        .frameOptions(withDefaults()));
 
         return http.build();
     }

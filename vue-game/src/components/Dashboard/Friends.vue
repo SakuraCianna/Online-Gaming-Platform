@@ -265,6 +265,11 @@ import { storeToRefs } from 'pinia'
 import { useUserStore } from '../../config/user';
 import { ElMessage } from 'element-plus'
 
+// 定义组件名称，支持 keep-alive 缓存
+defineOptions({
+  name: 'Friends'
+})
+
 const userStore = useUserStore()
 const { user, friends, friendsTotal } = storeToRefs(userStore)
 

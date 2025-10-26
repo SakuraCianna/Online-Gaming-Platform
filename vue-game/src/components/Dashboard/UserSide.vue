@@ -14,15 +14,13 @@
     <!-- 展示侧边栏按钮 -->
     <nav class="side-bar">
       <ul>
-        <li v-for="item in menu" :key="item.key"
-            :class="{active: isActive(item.key)}"
-            @click="goRoute(item.key)">
+        <li v-for="item in menu" :key="item.key" :class="{ active: isActive(item.key) }" @click="goRoute(item.key)">
           <span class="icon">{{ item.icon }}</span>
           <span class="label">{{ item.label }}</span>
         </li>
       </ul>
     </nav>
-    
+
     <!-- 退出登录按钮 -->
     <div class="logout-section">
       <button class="logout-btn" @click="logout">
@@ -51,6 +49,7 @@ const menu = [
   { key: 'friends', label: '好友', icon: '👥' },
   { key: 'rooms', label: '游戏房间', icon: '🏠' },
   { key: 'records', label: '游戏记录', icon: '📊' },
+  { key: 'leaderboard', label: '排行榜', icon: '🏆' },
   { key: 'settings', label: '设置', icon: '⚙️' }
 ]
 
@@ -65,7 +64,7 @@ function isActive(key) {
 async function logout() {
   try {
     userStore.stopPresence()
-    userStore.markOffline().catch(() => {})
+    userStore.markOffline().catch(() => { })
   } finally {
     userStore.clear()
     await router.replace('/')

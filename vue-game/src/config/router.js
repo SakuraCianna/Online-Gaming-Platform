@@ -35,6 +35,12 @@ const routes = [
         meta: { requiresAuth: true }
       },
       {
+        path: 'leaderboard',
+        name: 'Leaderboard',
+        component: () => import('../components/Dashboard/Leaderboard.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
         path: 'rooms',
         name: 'GameRooms',
         component: () => import('../components/Dashboard/GameRooms.vue'),
@@ -99,8 +105,6 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
-  await new Promise(resolve => setTimeout(resolve, 0))
-
   const userStore = useUserStore()
   const token = userStore.token
 

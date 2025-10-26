@@ -2,6 +2,11 @@
 import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
 
+// 定义组件名称，支持 keep-alive 缓存
+defineOptions({
+  name: 'GameCenter'
+})
+
 const router = useRouter()
 
 // 默认游戏统计数据
@@ -70,7 +75,7 @@ const startGame = (gameType) => {
 <template>
   <div class="tab-content games-center">
     <h2 class="section-title">游戏中心</h2>
-    
+
     <!-- 游戏卡片网格 -->
     <div class="games-grid">
       <!-- 2048游戏卡片 -->
@@ -157,49 +162,49 @@ const startGame = (gameType) => {
 </template>
 
 <style scoped>
-.section-title { 
-  font-size: 2rem; 
-  font-weight: bold; 
-  margin-bottom: 24px; 
-  color: #232946; 
+.section-title {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 24px;
+  color: #232946;
 }
 
-.games-grid { 
-  display: flex; 
-  gap: 32px; 
-  margin-bottom: 32px; 
+.games-grid {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 32px;
 }
 
-.game-card { 
-  background: #fff; 
-  border-radius: 16px; 
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08); 
-  padding: 24px; 
-  width: 220px; 
-  text-align: center; 
-  cursor: pointer; 
-  transition: transform 0.2s, box-shadow 0.2s; 
+.game-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  padding: 24px;
+  width: 220px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.game-card:hover { 
-  transform: translateY(-6px) scale(1.04); 
-  box-shadow: 0 6px 24px rgba(76,205,196,0.15); 
+.game-card:hover {
+  transform: translateY(-6px) scale(1.04);
+  box-shadow: 0 6px 24px rgba(76, 205, 196, 0.15);
 }
 
-.game-icon { 
-  font-size: 2.5rem; 
-  margin-bottom: 12px; 
+.game-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
 }
 
-.game-stats { 
-  margin-top: 10px; 
-  color: #4ecdc4; 
-  font-size: 1rem; 
+.game-stats {
+  margin-top: 10px;
+  color: #4ecdc4;
+  font-size: 1rem;
 }
 
-.stat-item { 
-  display: flex; 
-  justify-content: space-between; 
-  margin-bottom: 4px; 
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
 }
 </style>

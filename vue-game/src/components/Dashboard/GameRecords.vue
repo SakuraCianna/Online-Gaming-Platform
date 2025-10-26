@@ -1,12 +1,19 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Icon } from '@iconify/vue'
+import { useDebounceFn } from '@vueuse/core'
+import * as XLSX from 'xlsx'
 import request from '../../config/api'
 import { useUserStore } from '../../config/user'
+import { formatTime, formatDuration } from '../../utils/time'
+import StatCard from './StatCard.vue'
 
-// 游戏配置（遵循开闭原则）
-// 新增游戏时，只需在此添加配置即可
+defineOptions({
+    name: 'GameRecords'
+})
+
+// 此处为新增游戏配置的地方
 const GAME_CONFIGS = {
     '2048': {
         name: '2048',
@@ -96,7 +103,18 @@ const GAME_CONFIGS = {
     }
 }
 
-// ==================== 状态管理 ====================
+// 默认游戏配置（错误边界处理）
+const DEFAULT_GAME_CONFIG = {
+    name: '未知游戏',
+    icon: '❓',
+    color: '#9ca3af',
+    statusMap: {
+        default: { text: '未知', color: '#9ca3af', icon: 'mdi:help-circle' }
+    },
+    fields: [],
+    sortOptions: [{ label: '按时间', value: 'createTime' }]
+}
+
 const userStore = useUserStore()
 const user = computed(() => userStore.user)
 
@@ -104,12 +122,16 @@ const activeTab = ref('all')
 const sortBy = ref('createTime')
 const sortOrder = ref('desc')
 const loading = ref(false)
-const currentPage = ref(1)
-const pageSize = ref(20)
-const totalRecords = ref(0)
 
 // 游戏记录数据（从后端加载）
-const mockRecords = ref([])
+const allRecords = ref([])
+
+// 高级筛选状态
+const filterDrawer = ref(false)
+const dateRange = ref([])
+const statusFilter = ref('all') // all | 0 | 1 | 2 | win | lose | draw
+const difficultyFilter = ref('all') // all | beginner | intermediate | expert
+
 // 统计数据
 const statistics = ref({
     total: 0,
@@ -117,10 +139,38 @@ const statistics = ref({
     byGame: {}
 })
 
-// ==================== 计算属性 ====================
-// 筛选后的记录（后端已处理，直接返回）
+// 筛选后的记录
 const filteredRecords = computed(() => {
-    return mockRecords.value || []
+    let records = allRecords.value || []
+
+    // 按游戏类型筛选
+    if (activeTab.value !== 'all') {
+        records = records.filter(r => r.gameType === activeTab.value)
+    }
+
+    // 按日期范围筛选
+    if (dateRange.value && dateRange.value.length === 2) {
+        const [start, end] = dateRange.value
+        records = records.filter(r => {
+            const recordDate = new Date(r.createTime)
+            return recordDate >= start && recordDate <= end
+        })
+    }
+
+    // 按状态筛选
+    if (statusFilter.value !== 'all') {
+        records = records.filter(r => String(r.status) === String(statusFilter.value))
+    }
+
+    // 按难度筛选（仅扫雷）
+    if (difficultyFilter.value !== 'all' && activeTab.value === 'minesweeper') {
+        records = records.filter(r => r.difficulty === difficultyFilter.value)
+    }
+
+    // 排序
+    records = sortRecords([...records])
+
+    return records
 })
 
 // 当前激活游戏的排序选项
@@ -128,79 +178,143 @@ const currentSortOptions = computed(() => {
     if (activeTab.value === 'all') {
         return [{ label: '按时间', value: 'createTime' }]
     }
-    return GAME_CONFIGS[activeTab.value]?.sortOptions || []
+    const config = getGameConfig(activeTab.value)
+    return config.sortOptions || []
 })
 
-// ==================== 工具函数 ====================
-// 格式化时长
-function formatDuration(seconds) {
-    if (!seconds) return '0秒'
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
+// 当前游戏的状态选项（用于筛选）
+const currentStatusOptions = computed(() => {
+    if (activeTab.value === 'all') return []
+    const config = getGameConfig(activeTab.value)
+    return Object.entries(config.statusMap).map(([key, value]) => ({
+        value: key,
+        label: value.text
+    }))
+})
 
-    if (hours > 0) {
-        return `${hours}小时${minutes}分${secs}秒`
-    } else if (minutes > 0) {
-        return `${minutes}分${secs}秒`
-    } else {
-        return `${secs}秒`
-    }
-}
-
-// 获取游戏配置
+// 获取游戏配置（错误边界处理）
 function getGameConfig(gameType) {
-    return GAME_CONFIGS[gameType] || {}
+    return GAME_CONFIGS[gameType] || DEFAULT_GAME_CONFIG
 }
 
-// 获取状态信息
+// 获取状态信息（错误边界处理）
 function getStatusInfo(record) {
-    if (!record) return { text: '未知', color: '#9ca3af', icon: 'mdi:help-circle' }
+    if (!record) return DEFAULT_GAME_CONFIG.statusMap.default
     const config = getGameConfig(record.gameType)
-    return config.statusMap?.[record.status] || { text: '未知', color: '#9ca3af', icon: 'mdi:help-circle' }
+    return config.statusMap?.[record.status] || DEFAULT_GAME_CONFIG.statusMap.default
 }
 
-// 切换排序
-function toggleSort(option) {
+// 排序记录
+function sortRecords(records) {
+    return records.sort((a, b) => {
+        const aVal = a[sortBy.value]
+        const bVal = b[sortBy.value]
+
+        // 处理null/undefined
+        if (aVal === null || aVal === undefined) return 1
+        if (bVal === null || bVal === undefined) return -1
+
+        const comparison = aVal > bVal ? 1 : -1
+        return sortOrder.value === 'desc' ? -comparison : comparison
+    })
+}
+
+// 切换排序（带防抖）
+const toggleSort = useDebounceFn((option) => {
     if (sortBy.value === option) {
         sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
     } else {
         sortBy.value = option
         sortOrder.value = 'desc'
     }
+}, 300)
+
+// 重置筛选条件
+function resetFilters() {
+    dateRange.value = []
+    statusFilter.value = 'all'
+    difficultyFilter.value = 'all'
 }
 
-// ==================== 生命周期 ====================
-onMounted(() => {
+// 应用筛选（带防抖）
+const applyFilters = useDebounceFn(() => {
+    filterDrawer.value = false
+    ElMessage.success('筛选已应用')
+}, 300)
+
+function exportToExcel() {
+    if (filteredRecords.value.length === 0) {
+        ElMessage.warning('暂无数据可导出')
+        return
+    }
+
+    try {
+        // 准备导出数据
+        const exportData = filteredRecords.value.map(record => {
+            const config = getGameConfig(record.gameType)
+            const statusInfo = getStatusInfo(record)
+
+            const row = {
+                '游戏类型': config.name,
+                '状态': statusInfo.text,
+                '创建时间': formatTime(record.createTime)
+            }
+
+            // 添加游戏特定字段
+            for (const field of config.fields) {
+                row[field.label] = field.format(record[field.key], record)
+            }
+
+            return row
+        })
+
+        // 创建工作表
+        const ws = XLSX.utils.json_to_sheet(exportData)
+
+        // 设置列宽
+        const colWidths = Object.keys(exportData[0]).map(() => ({ wch: 15 }))
+        ws['!cols'] = colWidths
+
+        // 创建工作簿
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, '游戏记录')
+
+        // 导出文件
+        const fileName = `游戏记录_${formatTime(new Date(), 'YYYYMMDD_HHmmss')}.xlsx`
+        XLSX.writeFile(wb, fileName)
+
+        ElMessage.success('导出成功')
+    } catch (error) {
+        console.error('导出失败:', error)
+        ElMessage.error('导出失败，请重试')
+    }
+}
+
+// 优化数据加载时机，避免阻塞首次渲染
+onMounted(async () => {
     if (user.value?.id) {
+        // 优先加载统计数据（数据量小）
         loadStatistics()
-        // 初始化时加载"全部"Tab的数据
-        if (activeTab.value === 'all') {
+
+        // 使用 nextTick 和延迟加载记录列表，让页面先渲染
+        await nextTick()
+        setTimeout(() => {
             loadAllRecords()
+        }, 50) // 给页面 50ms 的渲染时间
+    }
+})
+
+// 监听activeTab变化（带防抖）
+watch(activeTab, useDebounceFn((newTab) => {
+    resetFilters()
+    if (user.value?.id) {
+        if (newTab === 'all') {
+            loadAllRecords()
+        } else {
+            loadRecordsByGame(newTab)
         }
     }
-})
-
-// 监听activeTab变化，切换游戏类型时加载对应记录
-watch(activeTab, (newTab) => {
-    if (newTab === 'all' && user.value?.id) {
-        currentPage.value = 1
-        loadAllRecords()
-    } else if (newTab !== 'all' && user.value?.id) {
-        currentPage.value = 1
-        loadRecordsByGame(newTab)
-    } else {
-        mockRecords.value = []
-        totalRecords.value = 0
-    }
-})
-
-// 监听分页变化
-watch(currentPage, (newPage) => {
-    if (activeTab.value !== 'all' && user.value?.id) {
-        loadRecordsByGame(activeTab.value, newPage)
-    }
-})
+}, 300))
 
 // 加载统计数据
 async function loadStatistics() {
@@ -257,7 +371,7 @@ async function loadAllRecords() {
     loading.value = true
     try {
         const response = await request.get('/record/all', {
-            params: { userId: user.value.id, page: 1, size: 40 }
+            params: { userId: user.value.id, page: 1, size: 1000 }
         })
 
         if (response.data.success && response.data.records) {
@@ -269,38 +383,33 @@ async function loadAllRecords() {
                 return record
             })
 
-            mockRecords.value = records
-            totalRecords.value = response.data.total || 0
+            allRecords.value = records
         } else {
-            mockRecords.value = []
-            totalRecords.value = 0
+            allRecords.value = []
         }
     } catch (error) {
         console.error('加载全部记录失败:', error)
         ElMessage.error('加载全部记录失败')
-        mockRecords.value = []
-        totalRecords.value = 0
+        allRecords.value = []
     } finally {
         loading.value = false
     }
 }
 
 // 加载指定游戏的记录
-async function loadRecordsByGame(gameType, page = 1) {
+async function loadRecordsByGame(gameType) {
     loading.value = true
     try {
         const response = await request.get(getApiPath(gameType), {
-            params: { userId: user.value.id, page, size: pageSize.value }
+            params: { userId: user.value.id, page: 1, size: 1000 }
         })
 
         const hasRecords = response.data.success && response.data.records
-        mockRecords.value = hasRecords ? processRecords(response.data.records, gameType) : []
-        totalRecords.value = hasRecords ? (response.data.total || 0) : 0
+        allRecords.value = hasRecords ? processRecords(response.data.records, gameType) : []
     } catch (error) {
         console.error('加载游戏记录失败:', error)
         ElMessage.error('加载游戏记录失败')
-        mockRecords.value = []
-        totalRecords.value = 0
+        allRecords.value = []
     } finally {
         loading.value = false
     }
@@ -315,34 +424,25 @@ async function loadRecordsByGame(gameType, page = 1) {
             <h2 class="title">游戏记录</h2>
             <span class="separator">|</span>
             <p class="subtitle">回顾你的游戏历程</p>
+
+            <!-- 导出按钮 -->
+            <button class="export-btn" @click="exportToExcel" title="导出为Excel">
+                <Icon icon="mdi:file-excel" />
+                <span>导出为Excel</span>
+            </button>
         </div>
 
         <!-- 统计卡片 -->
         <div class="statistics-cards">
-            <div class="stat-card total">
-                <Icon icon="mdi:gamepad-variant" class="stat-icon" />
-                <div class="stat-content">
-                    <div class="stat-value">{{ statistics.total }}</div>
-                    <div class="stat-label">总游戏数</div>
-                </div>
-            </div>
+            <StatCard icon="mdi:gamepad-variant" :value="statistics.total" label="总游戏数" type="total" />
 
-            <div class="stat-card time">
-                <Icon icon="mdi:clock-outline" class="stat-icon" />
-                <div class="stat-content">
-                    <div class="stat-value">{{ formatDuration(statistics.totalDuration) }}</div>
-                    <div class="stat-label">总游戏时长</div>
-                </div>
-            </div>
+            <StatCard icon="mdi:clock-outline" :value="formatDuration(statistics.totalDuration)" label="总游戏时长"
+                type="time" />
 
-            <div class="stat-card games" v-for="(data, gameType) in statistics.byGame" :key="gameType">
-                <div class="stat-icon">{{ GAME_CONFIGS[gameType]?.icon }}</div>
-                <div class="stat-content">
-                    <div class="stat-value">{{ data.count }}</div>
-                    <div class="stat-label">{{ GAME_CONFIGS[gameType]?.name }}</div>
-                </div>
-                <div class="stat-extra">胜率: {{ data.count > 0 ? Math.round(data.wins / data.count * 100) : 0 }}%</div>
-            </div>
+            <StatCard v-for="(data, gameType) in statistics.byGame" :key="gameType"
+                :icon="GAME_CONFIGS[gameType]?.icon || '🎮'" :value="data.count"
+                :label="GAME_CONFIGS[gameType]?.name || '未知游戏'" :color="GAME_CONFIGS[gameType]?.color"
+                :extra="`胜率: ${data.count > 0 ? Math.round(data.wins / data.count * 100) : 0}%`" type="games" />
         </div>
 
         <!-- 筛选和排序 -->
@@ -360,78 +460,126 @@ async function loadRecordsByGame(gameType, page = 1) {
                 </button>
             </div>
 
-            <div class="sort-controls">
-                <Icon icon="mdi:sort" class="sort-icon" />
-                <select v-model="sortBy" class="sort-select" aria-label="选择排序方式" title="选择排序方式">
-                    <option v-for="option in currentSortOptions" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                    </option>
-                </select>
-                <button class="sort-order-btn" @click="toggleSort(sortBy)"
-                    :title="sortOrder === 'desc' ? '降序排列' : '升序排列'"
-                    :aria-label="sortOrder === 'desc' ? '切换为升序' : '切换为降序'">
-                    <Icon :icon="sortOrder === 'desc' ? 'mdi:arrow-down' : 'mdi:arrow-up'" />
+            <div class="right-controls">
+                <!-- 高级筛选按钮 -->
+                <button class="filter-btn" @click="filterDrawer = true" title="高级筛选">
+                    <Icon icon="mdi:filter-variant" />
+                    <span>筛选</span>
                 </button>
+
+                <!-- 排序控制 -->
+                <div class="sort-controls">
+                    <Icon icon="mdi:sort" class="sort-icon" />
+                    <select v-model="sortBy" class="sort-select" aria-label="选择排序方式" title="选择排序方式">
+                        <option v-for="option in currentSortOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                        </option>
+                    </select>
+                    <button class="sort-order-btn" @click="toggleSort(sortBy)"
+                        :title="sortOrder === 'desc' ? '降序排列' : '升序排列'"
+                        :aria-label="sortOrder === 'desc' ? '切换为升序' : '切换为降序'">
+                        <Icon :icon="sortOrder === 'desc' ? 'mdi:arrow-down' : 'mdi:arrow-up'" />
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- 记录列表 -->
-        <div class="records-list" v-loading="loading">
+        <!-- 记录列表（虚拟滚动） -->
+        <div class="records-list-wrapper" v-loading="loading">
             <!-- 空数据提示 -->
             <div v-if="filteredRecords.length === 0 && !loading" class="empty-state">
                 <Icon icon="mdi:file-document-outline" class="empty-icon" />
                 <p>{{ activeTab === 'all' ? '暂无任何游戏记录' : '暂无游戏记录' }}</p>
             </div>
 
-            <div v-for="record in filteredRecords"
-                :key="`${record?.gameType || 'unknown'}-${record?.id || Math.random()}`" class="record-card"
-                :style="{ '--game-color': getGameConfig(record?.gameType)?.color || '#667eea' }">
-                <!-- 游戏类型标识 -->
-                <div class="record-header">
-                    <div class="game-badge">
-                        <span class="game-icon">{{ getGameConfig(record?.gameType)?.icon || '🎮' }}</span>
-                        <span class="game-name">{{ getGameConfig(record?.gameType)?.name || '未知游戏' }}</span>
+            <!-- Grid 布局列表 -->
+            <div v-else class="records-list">
+                <div v-for="record in filteredRecords"
+                    :key="`${record?.gameType || 'unknown'}-${record?.id || Math.random()}`" class="record-card"
+                    :style="{ '--game-color': getGameConfig(record?.gameType)?.color || '#667eea' }">
+                    <!-- 游戏类型标识 -->
+                    <div class="record-header">
+                        <div class="game-badge">
+                            <span class="game-icon">{{ getGameConfig(record?.gameType)?.icon || '🎮' }}</span>
+                            <span class="game-name">{{ getGameConfig(record?.gameType)?.name || '未知游戏' }}</span>
+                        </div>
+
+                        <div class="status-badge" :style="{
+                            backgroundColor: getStatusInfo(record)?.color + '20',
+                            color: getStatusInfo(record)?.color,
+                            borderColor: getStatusInfo(record)?.color
+                        }">
+                            <Icon :icon="getStatusInfo(record)?.icon" class="status-icon" />
+                            {{ getStatusInfo(record)?.text }}
+                        </div>
                     </div>
 
-                    <div class="status-badge" :style="{
-                        backgroundColor: getStatusInfo(record)?.color + '20',
-                        color: getStatusInfo(record)?.color,
-                        borderColor: getStatusInfo(record)?.color
-                    }">
-                        <Icon :icon="getStatusInfo(record)?.icon" class="status-icon" />
-                        {{ getStatusInfo(record)?.text }}
+                    <!-- 游戏数据 -->
+                    <div class="record-body">
+                        <div v-for="field in getGameConfig(record?.gameType)?.fields || []" :key="field.key"
+                            class="data-item">
+                            <Icon :icon="field.icon" class="data-icon" />
+                            <span class="data-label">{{ field.label }}:</span>
+                            <span class="data-value">{{ field.format(record?.[field.key], record) }}</span>
+                        </div>
                     </div>
-                </div>
 
-                <!-- 游戏数据 -->
-                <div class="record-body">
-                    <div v-for="field in getGameConfig(record?.gameType)?.fields || []" :key="field.key"
-                        class="data-item">
-                        <Icon :icon="field.icon" class="data-icon" />
-                        <span class="data-label">{{ field.label }}:</span>
-                        <span class="data-value">{{ field.format(record?.[field.key], record) }}</span>
+                    <!-- 时间信息 -->
+                    <div class="record-footer">
+                        <Icon icon="mdi:calendar-clock" class="time-icon" />
+                        <span class="time-text">{{ formatTime(record?.createTime) }}</span>
                     </div>
-                </div>
-
-                <!-- 时间信息 -->
-                <div class="record-footer">
-                    <Icon icon="mdi:calendar-clock" class="time-icon" />
-                    <span class="time-text">{{ record?.createTime || '未知时间' }}</span>
                 </div>
             </div>
         </div>
 
-        <!-- 分页组件（"全部"Tab不显示分页，因为显示的是混合记录）-->
-        <div v-if="activeTab !== 'all' && totalRecords > 0" class="pagination-wrapper">
-            <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="totalRecords"
-                layout="total, prev, pager, next, jumper" :hide-on-single-page="false" background />
-        </div>
+        <!-- 高级筛选抽屉 -->
+        <el-drawer v-model="filterDrawer" title="高级筛选" size="400px" direction="rtl">
+            <div class="filter-content">
+                <!-- 日期范围 -->
+                <div class="filter-section">
+                    <div class="filter-label">
+                        <Icon icon="mdi:calendar-range" />
+                        时间范围
+                    </div>
+                    <el-date-picker v-model="dateRange" type="daterange" range-separator="至" start-placeholder="开始日期"
+                        end-placeholder="结束日期" style="width: 100%" />
+                </div>
 
-        <!-- "全部"Tab提示 -->
-        <div v-if="activeTab === 'all' && totalRecords > 0" class="all-tab-notice">
-            <Icon icon="mdi:information" />
-            <span>显示所有游戏的最近记录（共{{ totalRecords }}条），如需查看更多请选择具体游戏类型</span>
-        </div>
+                <!-- 游戏状态 -->
+                <div class="filter-section" v-if="activeTab !== 'all' && currentStatusOptions.length > 0">
+                    <div class="filter-label">
+                        <Icon icon="mdi:state-machine" />
+                        游戏状态
+                    </div>
+                    <el-select v-model="statusFilter" placeholder="选择状态" style="width: 100%">
+                        <el-option label="全部状态" value="all" />
+                        <el-option v-for="option in currentStatusOptions" :key="option.value" :label="option.label"
+                            :value="option.value" />
+                    </el-select>
+                </div>
+
+                <!-- 扫雷难度 -->
+                <div class="filter-section" v-if="activeTab === 'minesweeper'">
+                    <div class="filter-label">
+                        <Icon icon="mdi:signal" />
+                        游戏难度
+                    </div>
+                    <el-select v-model="difficultyFilter" placeholder="选择难度" style="width: 100%">
+                        <el-option label="全部难度" value="all" />
+                        <el-option label="初级" value="beginner" />
+                        <el-option label="中级" value="intermediate" />
+                        <el-option label="高级" value="expert" />
+                    </el-select>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="filter-actions">
+                    <el-button @click="resetFilters">重置</el-button>
+                    <el-button type="primary" @click="applyFilters">应用筛选</el-button>
+                </div>
+            </div>
+        </el-drawer>
     </div>
 </template>
 
@@ -442,7 +590,6 @@ async function loadRecordsByGame(gameType, page = 1) {
     margin: 0 auto;
 }
 
-/* ==================== 页面标题 ==================== */
 .records-header {
     display: flex;
     align-items: center;
@@ -454,6 +601,7 @@ async function loadRecordsByGame(gameType, page = 1) {
     border-radius: 12px;
     color: white;
     box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+    position: relative;
 }
 
 .title-icon {
@@ -480,7 +628,27 @@ async function loadRecordsByGame(gameType, page = 1) {
     font-weight: 400;
 }
 
-/* ==================== 统计卡片 ==================== */
+.export-btn {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.export-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+}
+
 .statistics-cards {
     display: flex;
     gap: 16px;
@@ -508,80 +676,6 @@ async function loadRecordsByGame(gameType, page = 1) {
     background: #9ca3af;
 }
 
-.stat-card {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 20px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-    min-width: 220px;
-    flex-shrink: 0;
-}
-
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    background: linear-gradient(to bottom, var(--stat-color, #667eea), transparent);
-}
-
-.stat-card.total {
-    --stat-color: #667eea;
-}
-
-.stat-card.time {
-    --stat-color: #f59e0b;
-}
-
-.stat-card.games {
-    --stat-color: #10b981;
-}
-
-.stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-}
-
-.stat-icon {
-    font-size: 36px;
-    color: var(--stat-color, #667eea);
-}
-
-.stat-content {
-    flex: 1;
-}
-
-.stat-value {
-    font-size: 24px;
-    font-weight: 700;
-    color: #1f2937;
-    line-height: 1;
-    margin-bottom: 4px;
-}
-
-.stat-label {
-    font-size: 12px;
-    color: #6b7280;
-}
-
-.stat-extra {
-    font-size: 12px;
-    color: #10b981;
-    font-weight: 600;
-    position: absolute;
-    bottom: 8px;
-    right: 12px;
-}
-
-/* ==================== 控制栏 ==================== */
 .controls {
     display: flex;
     justify-content: space-between;
@@ -629,6 +723,33 @@ async function loadRecordsByGame(gameType, page = 1) {
     font-size: 18px;
 }
 
+.right-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #6b7280;
+    transition: all 0.3s ease;
+}
+
+.filter-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+    transform: translateY(-2px);
+}
+
 .sort-controls {
     display: flex;
     align-items: center;
@@ -673,16 +794,18 @@ async function loadRecordsByGame(gameType, page = 1) {
     color: #1f2937;
 }
 
-/* ==================== 记录列表 ==================== */
+.records-list-wrapper {
+    min-height: 400px;
+    position: relative;
+}
+
 .records-list {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
     gap: 20px;
 }
 
-/* 空数据状态 */
 .empty-state {
-    grid-column: 1 / -1;
     text-align: center;
     padding: 60px 20px;
     color: #9ca3af;
@@ -699,17 +822,16 @@ async function loadRecordsByGame(gameType, page = 1) {
     margin: 0;
 }
 
-/* ==================== 记录卡片 ==================== */
 .record-card {
     background: white;
     border-radius: 12px;
-    padding: 20px;
+    padding: 16px;
+    margin-bottom: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     transition: all 0.3s ease;
     border-left: 4px solid var(--game-color, #667eea);
     position: relative;
     overflow: hidden;
-    animation: fadeInUp 0.4s ease-out;
 }
 
 .record-card::after {
@@ -733,8 +855,8 @@ async function loadRecordsByGame(gameType, page = 1) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
     border-bottom: 1px solid #f3f4f6;
 }
 
@@ -772,8 +894,8 @@ async function loadRecordsByGame(gameType, page = 1) {
 .record-body {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 
 .data-item {
@@ -812,7 +934,7 @@ async function loadRecordsByGame(gameType, page = 1) {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding-top: 12px;
+    padding-top: 10px;
     border-top: 1px solid #f3f4f6;
     color: #9ca3af;
     font-size: 12px;
@@ -822,30 +944,34 @@ async function loadRecordsByGame(gameType, page = 1) {
     font-size: 14px;
 }
 
-/* ==================== 分页组件 ==================== */
-.pagination-wrapper {
-    display: flex;
-    justify-content: center;
-    margin-top: 32px;
-    padding: 20px 0;
+.filter-content {
+    padding: 20px;
 }
 
-/* "全部"Tab提示 */
-.all-tab-notice {
+.filter-section {
+    margin-bottom: 24px;
+}
+
+.filter-label {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 8px;
-    margin-top: 24px;
-    padding: 12px 20px;
-    background: #f0f9ff;
-    border: 1px solid #bae6fd;
-    border-radius: 8px;
-    color: #0369a1;
-    font-size: 13px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 12px;
 }
 
-/* ==================== 响应式 ==================== */
+.filter-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 32px;
+}
+
+.filter-actions .el-button {
+    flex: 1;
+}
+
 @media (max-width: 768px) {
     .records-header {
         flex-wrap: wrap;
@@ -864,16 +990,14 @@ async function loadRecordsByGame(gameType, page = 1) {
         font-size: 12px;
     }
 
+    .export-btn {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+    }
+
     .statistics-cards {
         gap: 12px;
-    }
-
-    .stat-card {
-        min-width: 180px;
-    }
-
-    .records-list {
-        grid-template-columns: 1fr;
     }
 
     .controls {
@@ -886,21 +1010,17 @@ async function loadRecordsByGame(gameType, page = 1) {
         -webkit-overflow-scrolling: touch;
     }
 
-    .record-body {
+    .right-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .records-list {
         grid-template-columns: 1fr;
     }
-}
 
-/* ==================== 动画 ==================== */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
+    .record-body {
+        grid-template-columns: 1fr;
     }
 }
 </style>
