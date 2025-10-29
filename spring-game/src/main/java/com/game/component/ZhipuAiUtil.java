@@ -1,4 +1,4 @@
-package com.game.config;
+package com.game.component;
 
 import ai.z.openapi.ZhipuAiClient;
 import ai.z.openapi.service.model.*;

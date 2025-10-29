@@ -61,9 +61,15 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/game/tank',
+    path: '/game/tank-battle',
     name: 'TankBattle',
     component: () => import('../components/game/TankBattle.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/game/tank-battle/play',
+    name: 'TankBattleGame',
+    component: () => import('../components/game/TankBattleGame.vue'),
     meta: { requiresAuth: true }
   },
   {

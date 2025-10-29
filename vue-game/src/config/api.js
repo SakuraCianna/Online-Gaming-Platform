@@ -11,7 +11,7 @@ const request = axios.create({
   timeout: 10000
 })
 
-// AI请求实例 - 60秒超时（AI计算需要更长时间）
+// AI请求实例 - 60秒超时
 const aiRequest = axios.create({
   baseURL,
   timeout: 60000

@@ -1,7 +1,7 @@
 package com.game.controller;
 
-import com.game.config.HCaptchaUtil;
-import com.game.config.JwtUtils;
+import com.game.component.HCaptchaUtil;
+import com.game.component.JwtUtils;
 import com.game.mapper.FriendMapper;
 import com.game.mapper.UserMapper;
 import com.game.service.UserService;

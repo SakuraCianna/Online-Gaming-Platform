@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>坦克大战地图编辑器 - 线条版</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+            min-height: 100vh;
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .canvas-wrapper {
+            background: white;
+            border: 5px solid #000000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            position: relative;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+            background: white;
+        }
+
+        .coords {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px 14px;
+            border: 5px solid #000000;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+
+        .sidebar {
+            width: 340px;
+            background: white;
+            border: 5px solid #000000;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        .section {
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 15px;
+        }
+
+        .section:last-child {
+            border-bottom: none;
+        }
+
+        .section h3 {
+            font-size: 15px;
+            margin-bottom: 12px;
+            color: #333;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="range"] {
+            width: 100%;
+            padding: 10px;
+            border: 3px solid #ccc;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #000000;
+        }
+
+        input[type="range"] {
+            padding: 0;
+            height: 6px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #000000;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #000000;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+
+        .tool-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .tool-buttons.two-col {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .tool-btn {
+            padding: 10px 8px;
+            border: 5px solid #000000;
+            background: white;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .tool-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .tool-btn.active {
+            background: #000000;
+            color: white;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: 5px solid #000000;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #000000;
+            color: white;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .btn-delete {
+            border-color: #d00;
+            color: #d00;
+        }
+
+        .btn-delete:hover {
+            background: #d00;
+            color: white;
+        }
+
+        .line-list {
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .line-item {
+            padding: 10px;
+            border: 3px solid #ddd;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fafafa;
+        }
+
+        .line-item:hover {
+            background: #f0f0f0;
+            border-color: #999;
+        }
+
+        .line-item button {
+            width: auto;
+            padding: 6px 14px;
+            margin: 0;
+            font-size: 11px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 12px;
+            border: 3px solid #ccc;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            resize: vertical;
+        }
+
+        .info {
+            background: #f9f9f9;
+            padding: 12px;
+            font-size: 12px;
+            color: #666;
+            border-left: 4px solid #333;
+            margin-bottom: 12px;
+        }
+
+        .info-small {
+            font-size: 11px;
+            margin-top: 8px;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .thickness-display {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .thickness-value {
+            font-weight: bold;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .hint {
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            padding: 10px;
+            background: white;
+            border: 5px solid #000000;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h1>坦克大战地图编辑器（线条版）</h1>
+        
+        <div class="canvas-wrapper">
+            <canvas id="mapCanvas" width="1200" height="800"></canvas>
+            <div class="coords" id="coordInfo">X: 0, Y: 0</div>
+        </div>
+
+        <div class="hint">
+            <strong>操作说明：</strong>点击并拖动绘制线条 | 按住Shift绘制完美垂直/水平线
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="section">
+            <h3>地图信息</h3>
+            <input type="text" id="mapId" placeholder="地图ID（英文）" value="custom-map" aria-label="地图ID">
+            <input type="text" id="mapName" placeholder="地图名称" value="自定义地图" aria-label="地图名称">
+            <input type="text" id="mapDesc" placeholder="地图描述" value="线条风格地图" aria-label="地图描述">
+        </div>
+
+        <div class="section">
+            <h3>绘制模式</h3>
+            <div class="tool-buttons">
+                <button class="tool-btn active" id="modeFree" onclick="setDrawMode('free')">✏️ 自由</button>
+                <button class="tool-btn" id="modeVertical" onclick="setDrawMode('vertical')">↕️ 垂直</button>
+                <button class="tool-btn" id="modeHorizontal" onclick="setDrawMode('horizontal')">↔️ 水平</button>
+            </div>
+            <div class="info" id="modeInfo">
+                当前：自由绘制（按Shift强制垂直/水平）
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>线条粗细</h3>
+            <div class="thickness-display">
+                <span>粗细：</span>
+                <span class="thickness-value" id="thicknessValue">5</span>
+                <span>像素</span>
+            </div>
+            <label for="lineThickness" class="sr-only">线条粗细</label>
+            <input type="range" id="lineThickness" min="2" max="40" value="5" aria-label="线条粗细">
+        </div>
+
+        <div class="section">
+            <h3>🧲 端点吸附</h3>
+            <div class="thickness-display">
+                <span>吸附距离：</span>
+                <span class="thickness-value" id="snapValue">15</span>
+                <span>像素</span>
+            </div>
+            <label for="snapDistance" class="sr-only">吸附距离</label>
+            <input type="range" id="snapDistance" min="5" max="30" value="15" aria-label="吸附距离">
+            <div class="info info-small">
+                靠近其他线条端点时会自动吸附连接
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>线条列表 (<span id="lineCount">0</span>)</h3>
+            <div class="line-list" id="lineList">暂无线条</div>
+        </div>
+
+        <div class="section">
+            <h3>操作</h3>
+            <button onclick="exportJSON()">📋 复制JSON到剪贴板</button>
+            <button onclick="downloadJSON()">💾 下载JSON文件</button>
+            <button onclick="importJSON()">📥 导入JSON</button>
+            <button class="btn-delete" onclick="clearAll()">🗑️ 清空所有线条</button>
+        </div>
+
+        <div class="section">
+            <h3>JSON预览</h3>
+            <label for="jsonOutput" class="sr-only">JSON输出</label>
+            <textarea id="jsonOutput" readonly aria-label="JSON输出"></textarea>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let lines = [];
+        let lineThickness = 5;
+        let drawMode = 'free'; // 'free', 'vertical', 'horizontal'
+        let isDrawing = false;
+        let startX, startY;
+        let tempLine = null;
+        let snapDistance = 15; // 吸附距离（像素）
+        let snapPoint = null; // 当前吸附的点
+        const CANVAS_WIDTH = 1200;
+        const CANVAS_HEIGHT = 800;
+
+        // 绘制纯白色背景
+        function drawBackground() {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 1200, 800);
+        }
+
+        // 计算两点之间的距离
+        function calculateDistance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+        // 检查线条端点
+        function findNearestLineEndpoint(x, y, maxDist) {
+            let nearest = null;
+            let minDist = maxDist;
+
+            for (const line of lines) {
+                const points = [
+                    { x: line.x1, y: line.y1 },
+                    { x: line.x2, y: line.y2 }
+                ];
+
+                for (const point of points) {
+                    const dist = calculateDistance(x, y, point.x, point.y);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearest = point;
+                    }
+                }
+            }
+
+            return { point: nearest, distance: minDist };
+        }
+
+        // 获取画布边界候选点
+        function getBoundarySnapPoints(x, y) {
+            const points = [];
+
+            if (Math.abs(y) < snapDistance) {
+                points.push({ x: x, y: 0 });
+            }
+            if (Math.abs(y - CANVAS_HEIGHT) < snapDistance) {
+                points.push({ x: x, y: CANVAS_HEIGHT });
+            }
+            if (Math.abs(x) < snapDistance) {
+                points.push({ x: 0, y: y });
+            }
+            if (Math.abs(x - CANVAS_WIDTH) < snapDistance) {
+                points.push({ x: CANVAS_WIDTH, y: y });
+            }
+
+            const corners = [
+                { x: 0, y: 0 },
+                { x: CANVAS_WIDTH, y: 0 },
+                { x: 0, y: CANVAS_HEIGHT },
+                { x: CANVAS_WIDTH, y: CANVAS_HEIGHT }
+            ];
+
+            for (const corner of corners) {
+                if (calculateDistance(x, y, corner.x, corner.y) < snapDistance) {
+                    points.push(corner);
+                }
+            }
+
+            return points;
+        }
+
+        // 查找最近的端点（包括画布边界）
+        function findNearestPoint(x, y) {
+            const lineResult = findNearestLineEndpoint(x, y, snapDistance);
+            let nearest = lineResult.point;
+            let minDist = lineResult.distance;
+
+            const boundaryPoints = getBoundarySnapPoints(x, y);
+            for (const point of boundaryPoints) {
+                const dist = calculateDistance(x, y, point.x, point.y);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = point;
+                }
+            }
+
+            return nearest;
+        }
+
+        // 绘制吸附点提示
+        function drawSnapIndicator(x, y) {
+            ctx.save();
+            ctx.strokeStyle = '#ff0000';
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+            ctx.lineWidth = 2;
+
+            // 外圈
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 内圈
+            ctx.fillStyle = '#ff0000';
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // 设置绘制模式
+        function setDrawMode(mode) {
+            drawMode = mode;
+            
+            // 更新按钮状态
+            document.getElementById('modeFree').classList.remove('active');
+            document.getElementById('modeVertical').classList.remove('active');
+            document.getElementById('modeHorizontal').classList.remove('active');
+            
+            if (mode === 'free') {
+                document.getElementById('modeFree').classList.add('active');
+                document.getElementById('modeInfo').textContent = '当前：自由绘制（按Shift强制垂直/水平）';
+            } else if (mode === 'vertical') {
+                document.getElementById('modeVertical').classList.add('active');
+                document.getElementById('modeInfo').textContent = '当前：垂直模式（只能上下画线）';
+            } else if (mode === 'horizontal') {
+                document.getElementById('modeHorizontal').classList.add('active');
+                document.getElementById('modeInfo').textContent = '当前：水平模式（只能左右画线）';
+            }
+        }
+
+        // 绘制线条
+        function drawLine(line, isTemp = false) {
+            ctx.strokeStyle = isTemp ? '#999999' : '#000000';
+            ctx.lineWidth = line.thickness;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            if (isTemp) {
+                ctx.setLineDash([5, 5]);
+            } else {
+                ctx.setLineDash([]);
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(line.x1, line.y1);
+            ctx.lineTo(line.x2, line.y2);
+            ctx.stroke();
+            
+            ctx.setLineDash([]);
+        }
+
+        // 渲染画布
+        function render() {
+            drawBackground();
+            for (const line of lines) {
+                drawLine(line);
+            }
+            if (tempLine) {
+                drawLine(tempLine, true);
+            }
+            // 绘制吸附点提示
+            if (snapPoint && !isDrawing) {
+                drawSnapIndicator(snapPoint.x, snapPoint.y);
+            }
+            updateLineList();
+            updateJSON();
+        }
+
+        // 鼠标按下
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            let mouseX = e.clientX - rect.left;
+            let mouseY = e.clientY - rect.top;
+
+            // 检查是否有吸附点
+            const snap = findNearestPoint(mouseX, mouseY);
+            if (snap) {
+                startX = snap.x;
+                startY = snap.y;
+            } else {
+                startX = mouseX;
+                startY = mouseY;
+            }
+            
+            isDrawing = true;
+        });
+
+        // 更新坐标显示
+        function updateCoordinateDisplay(mouseX, mouseY) {
+            const displayX = snapPoint && !isDrawing ? snapPoint.x : Math.round(mouseX);
+            const displayY = snapPoint && !isDrawing ? snapPoint.y : Math.round(mouseY);
+            const snapIndicator = snapPoint && !isDrawing ? ' 🧲' : '';
+            document.getElementById('coordInfo').textContent = `X: ${displayX}, Y: ${displayY}${snapIndicator}`;
+        }
+
+        // 应用绘制模式约束
+        function applyDrawModeConstraint(endX, endY, shiftKey) {
+            if (drawMode === 'vertical') {
+                return { x: startX, y: endY };
+            }
+            if (drawMode === 'horizontal') {
+                return { x: endX, y: startY };
+            }
+            if (drawMode === 'free' && shiftKey) {
+                const dx = Math.abs(endX - startX);
+                const dy = Math.abs(endY - startY);
+                return dx > dy ? { x: endX, y: startY } : { x: startX, y: endY };
+            }
+            return { x: endX, y: endY };
+        }
+
+        // 处理绘制中的鼠标移动
+        function handleDrawingMouseMove(mouseX, mouseY, shiftKey) {
+            let endX = mouseX;
+            let endY = mouseY;
+
+            const endSnap = findNearestPoint(mouseX, mouseY);
+            if (endSnap) {
+                endX = endSnap.x;
+                endY = endSnap.y;
+            }
+
+            const constrained = applyDrawModeConstraint(endX, endY, shiftKey);
+            tempLine = {
+                x1: startX,
+                y1: startY,
+                x2: constrained.x,
+                y2: constrained.y,
+                thickness: lineThickness
+            };
+            render();
+        }
+
+        // 鼠标移动
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            if (!isDrawing) {
+                snapPoint = findNearestPoint(mouseX, mouseY);
+                render();
+            }
+            
+            updateCoordinateDisplay(mouseX, mouseY);
+
+            if (isDrawing) {
+                handleDrawingMouseMove(mouseX, mouseY, e.shiftKey);
+            }
+        });
+
+        // 鼠标抬起
+        canvas.addEventListener('mouseup', (e) => {
+            if (isDrawing && tempLine) {
+                // 检查线条长度，至少10像素
+                const length = Math.sqrt(
+                    Math.pow(tempLine.x2 - tempLine.x1, 2) + 
+                    Math.pow(tempLine.y2 - tempLine.y1, 2)
+                );
+                
+                if (length >= 10) {
+                    lines.push(tempLine);
+                }
+            }
+            tempLine = null;
+            isDrawing = false;
+            snapPoint = null; // 清除吸附点
+            render();
+        });
+
+        // 鼠标离开画布
+        canvas.addEventListener('mouseleave', () => {
+            snapPoint = null;
+            if (!isDrawing) {
+                render();
+            }
+        });
+
+        // 线条粗细滑块
+        document.getElementById('lineThickness').addEventListener('input', (e) => {
+            lineThickness = Number.parseInt(e.target.value, 10);
+            document.getElementById('thicknessValue').textContent = lineThickness;
+        });
+
+        // 吸附距离滑块
+        document.getElementById('snapDistance').addEventListener('input', (e) => {
+            snapDistance = Number.parseInt(e.target.value, 10);
+            document.getElementById('snapValue').textContent = snapDistance;
+        });
+
+        // 更新线条列表
+        function updateLineList() {
+            const list = document.getElementById('lineList');
+            document.getElementById('lineCount').textContent = lines.length;
+            
+            if (lines.length === 0) {
+                list.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">暂无线条</div>';
+                return;
+            }
+
+            list.innerHTML = lines.map((line, i) => {
+                const length = Math.round(Math.sqrt(
+                    Math.pow(line.x2 - line.x1, 2) + 
+                    Math.pow(line.y2 - line.y1, 2)
+                ));
+                const isVertical = Math.abs(line.x2 - line.x1) < 5;
+                const isHorizontal = Math.abs(line.y2 - line.y1) < 5;
+                let type = '斜线';
+                if (isVertical) type = '垂直';
+                if (isHorizontal) type = '水平';
+                
+                return `
+                    <div class="line-item">
+                        <span>${i+1}. ${type} ${length}px 粗${line.thickness}px</span>
+                        <button onclick="deleteLine(${i})">删除</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 删除线条
+        function deleteLine(index) {
+            lines.splice(index, 1);
+            render();
+        }
+
+        // 清空所有
+        function clearAll() {
+            if (confirm('确定要清空所有线条吗？')) {
+                lines = [];
+                render();
+            }
+        }
+
+        // 将线条转换为墙壁格式
+        function linesToWalls() {
+            return lines.map(line => {
+                const width = Math.abs(line.x2 - line.x1) || line.thickness;
+                const height = Math.abs(line.y2 - line.y1) || line.thickness;
+                const x = (line.x1 + line.x2) / 2;
+                const y = (line.y1 + line.y2) / 2;
+                
+                const isVertical = Math.abs(line.x2 - line.x1) < 5;
+                const isHorizontal = Math.abs(line.y2 - line.y1) < 5;
+                let type = 'corner';
+                if (isVertical) type = 'vertical';
+                if (isHorizontal) type = 'horizontal';
+                if (width >= 100 && height >= 100) type = 'large';
+                
+                return {
+                    x: Math.round(x),
+                    y: Math.round(y),
+                    width: Math.max(Math.round(width), line.thickness),
+                    height: Math.max(Math.round(height), line.thickness),
+                    type: type
+                };
+            });
+        }
+
+        // 更新JSON
+        function updateJSON() {
+            const data = {
+                id: document.getElementById('mapId').value,
+                name: document.getElementById('mapName').value,
+                description: document.getElementById('mapDesc').value,
+                size: {
+                    width: 1200,
+                    height: 800
+                },
+                walls: linesToWalls()
+            };
+            document.getElementById('jsonOutput').value = JSON.stringify(data, null, 2);
+        }
+
+        // 导出JSON
+        function exportJSON() {
+            const text = document.getElementById('jsonOutput').value;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ JSON已复制到剪贴板！');
+            }).catch(() => {
+                alert('❌ 复制失败，请手动复制');
+            });
+        }
+
+        // 下载JSON
+        function downloadJSON() {
+            const text = document.getElementById('jsonOutput').value;
+            const blob = new Blob([text], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${document.getElementById('mapId').value}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        // 导入JSON
+        function importJSON() {
+            const jsonText = prompt('请粘贴JSON数据：');
+            if (!jsonText) return;
+
+            try {
+                const data = JSON.parse(jsonText);
+                if (data.walls && Array.isArray(data.walls)) {
+                    // 将墙壁转换为线条
+                    lines = data.walls.map(wall => ({
+                        x1: wall.x - wall.width / 2,
+                        y1: wall.y - wall.height / 2,
+                        x2: wall.x + wall.width / 2,
+                        y2: wall.y + wall.height / 2,
+                        thickness: Math.min(wall.width, wall.height)
+                    }));
+                    
+                    if (data.id) document.getElementById('mapId').value = data.id;
+                    if (data.name) document.getElementById('mapName').value = data.name;
+                    if (data.description) document.getElementById('mapDesc').value = data.description;
+                    render();
+                    alert('✅ 导入成功！');
+                } else {
+                    alert('❌ JSON格式不正确');
+                }
+            } catch (e) {
+                alert('❌ JSON解析失败：' + e.message);
+            }
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z') {
+                    e.preventDefault();
+                    if (lines.length > 0) {
+                        lines.pop();
+                        render();
+                    }
+                }
+                if (e.key === 'c') {
+                    e.preventDefault();
+                    exportJSON();
+                }
+            }
+            if (e.key === 'Delete' && lines.length > 0) {
+                lines.pop();
+                render();
+            }
+        });
+
+        // 监听输入变化
+        document.getElementById('mapId').addEventListener('input', updateJSON);
+        document.getElementById('mapName').addEventListener('input', updateJSON);
+        document.getElementById('mapDesc').addEventListener('input', updateJSON);
+
+        // 初始化
+        render();
+    </script>
+</body>
+</html>
+

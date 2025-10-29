@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.component.RedisKeyManager;
 import com.game.config.AiModelConfig;
-import com.game.config.ZhipuAiUtil;
+import com.game.component.ZhipuAiUtil;
 import com.game.entity.GameRoom;
 import com.game.entity.Gomoku;
 import com.game.entity.RoomPlayer;

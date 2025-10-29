@@ -1,9 +1,8 @@
 package com.game.Interceptor;
 
-import com.game.config.JwtUtils;
+import com.game.component.JwtUtils;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.security.SignatureException; // <--- 修改后的 import
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

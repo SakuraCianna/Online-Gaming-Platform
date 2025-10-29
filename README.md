@@ -621,9 +621,9 @@ docker-compose up -d
 
 ## 👥 作者
 
-- **开发者**: Your Name
-- **邮箱**: your.email@example.com
-- **GitHub**: [@yourusername](https://github.com/yourusername)
+- **开发者**: Sakura_Cianna
+- **邮箱**: 754515922@qq.com
+- **GitHub**: [@Sakura_Cianna](https://github.com/Sakura_Cianna)
 
 ---
 

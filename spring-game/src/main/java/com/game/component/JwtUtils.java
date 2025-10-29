@@ -1,4 +1,4 @@
-package com.game.config;
+package com.game.component;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;

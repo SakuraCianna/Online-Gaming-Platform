@@ -1,0 +1,179 @@
+{
+    "id": "tankmap-1",
+    "name": "坦克大战地图1",
+    "description": "经典地图",
+    "size": {
+      "width": 1200,
+      "height": 800
+    },
+    "walls": [
+      {
+        "x": 91,
+        "y": 129,
+        "width": 182,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 182,
+        "y": 213,
+        "width": 5,
+        "height": 168,
+        "type": "vertical"
+      },
+      {
+        "x": 242,
+        "y": 297,
+        "width": 120,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 1054,
+        "y": 208,
+        "width": 5,
+        "height": 417,
+        "type": "vertical"
+      },
+      {
+        "x": 982,
+        "y": 95,
+        "width": 140,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 605,
+        "y": 297,
+        "width": 606,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 981,
+        "y": 417,
+        "width": 147,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 712,
+        "y": 463,
+        "width": 5,
+        "height": 332,
+        "type": "vertical"
+      },
+      {
+        "x": 272,
+        "y": 382,
+        "width": 5,
+        "height": 168,
+        "type": "vertical"
+      },
+      {
+        "x": 192,
+        "y": 466,
+        "width": 160,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 272,
+        "y": 554,
+        "width": 5,
+        "height": 177,
+        "type": "vertical"
+      },
+      {
+        "x": 48,
+        "y": 655,
+        "width": 96,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 272,
+        "y": 665,
+        "width": 5,
+        "height": 45,
+        "type": "vertical"
+      },
+      {
+        "x": 113,
+        "y": 655,
+        "width": 34,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 492,
+        "y": 630,
+        "width": 5,
+        "height": 339,
+        "type": "vertical"
+      },
+      {
+        "x": 981,
+        "y": 661,
+        "width": 5,
+        "height": 278,
+        "type": "vertical"
+      },
+      {
+        "x": 764,
+        "y": 629,
+        "width": 104,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 463,
+        "y": 461,
+        "width": 58,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 536,
+        "y": 461,
+        "width": 88,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 1152,
+        "y": 608,
+        "width": 97,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 383,
+        "y": 214,
+        "width": 5,
+        "height": 162,
+        "type": "vertical"
+      },
+      {
+        "x": 714,
+        "y": 66,
+        "width": 5,
+        "height": 133,
+        "type": "vertical"
+      },
+      {
+        "x": 642,
+        "y": 133,
+        "width": 145,
+        "height": 5,
+        "type": "horizontal"
+      },
+      {
+        "x": 857,
+        "y": 252,
+        "width": 5,
+        "height": 81,
+        "type": "vertical"
+      }
+    ]
+  }

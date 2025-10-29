@@ -7,6 +7,7 @@ import router from './config/router'
 import App from './App.vue'
 import './assets/main.css'
 import 'element-plus/dist/index.css'
+import VueKonva from 'vue-konva'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -14,5 +15,6 @@ pinia.use(piniaPluginPersistedstate)
 
 app.use(pinia)
 app.use(ElementPlus, { locale: zhCn })
+app.use(VueKonva)
 app.use(router)
 app.mount('#app')

@@ -1,4 +1,4 @@
-package com.game.config;
+package com.game.component;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 

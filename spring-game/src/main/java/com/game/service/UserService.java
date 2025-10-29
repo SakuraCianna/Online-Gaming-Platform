@@ -1,7 +1,7 @@
 package com.game.service;
 
-import com.game.config.JwtUtils;
-import com.game.config.PasswordUtils;
+import com.game.component.JwtUtils;
+import com.game.component.PasswordUtils;
 import com.game.entity.User;
 import com.game.exception.BusinessException;
 import com.game.mapper.UserMapper;

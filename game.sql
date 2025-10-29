@@ -436,57 +436,66 @@ COMMENT ON COLUMN room_player.join_time IS '加入时间';
 
 COMMENT ON COLUMN room_player.leave_time IS '离开时间';
 
--- ==================== 坦克动荡游戏记录表 ====================
+-- 优化后的坦克大战表
+DROP TABLE IF EXISTS tank_battle CASCADE;
+
+
 CREATE TABLE tank_battle (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    room_id BIGINT,
-    duration INT DEFAULT 0,
+    room_id BIGINT
+
+    map_name VARCHAR(50) DEFAULT 'classic',
+    
+    game_data JSONB,
+
+    kills INT DEFAULT 0, -- 击杀数
+    deaths INT DEFAULT 0, -- 死亡次数
+    assists INT DEFAULT 0, -- 助攻数
+    damage_dealt INT DEFAULT 0, -- 造成伤害
+    damage_taken INT DEFAULT 0, -- 受到伤害
+
+    score INT DEFAULT 0,
+    final_rank INT,
+
+-- 原有字段
+duration INT DEFAULT 0,
     status SMALLINT DEFAULT 0, -- 0-进行中,1-已结束
     start_time TIMESTAMP,
     end_time TIMESTAMP,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 坦克游戏表索引
+-- 索引优化
 CREATE INDEX idx_user_id_tb ON tank_battle (user_id);
 
 CREATE INDEX idx_room_id_tb ON tank_battle (room_id);
 
+CREATE INDEX idx_map_name ON tank_battle (map_name);
+
+CREATE INDEX idx_score_tb ON tank_battle (score DESC);
+-- 排行榜查询
+CREATE INDEX idx_user_score_tb ON tank_battle (user_id, score DESC);
+
 CREATE INDEX idx_status_tb ON tank_battle (status);
 
-CREATE INDEX idx_start_time_tb ON tank_battle (start_time);
+CREATE INDEX idx_create_time_tb ON tank_battle (create_time DESC);
 
-CREATE INDEX idx_end_time_tb ON tank_battle (end_time);
+-- JSONB索引（提升查询性能）
+CREATE INDEX idx_game_data_gin ON tank_battle USING GIN (game_data);
 
-CREATE INDEX idx_user_status_tb ON tank_battle (user_id, status);
+-- 注释
+COMMENT ON COLUMN tank_battle.map_name IS '地图名称:classic-经典,desert-沙漠,forest-森林';
 
-CREATE INDEX idx_create_time_tb ON tank_battle (create_time);
+COMMENT ON COLUMN tank_battle.game_data IS '游戏数据(地图配置、障碍物、回放等)';
 
-CREATE INDEX idx_user_create_time_tb ON tank_battle (user_id, create_time);
+COMMENT ON COLUMN tank_battle.kills IS '击杀数';
 
-COMMENT ON TABLE tank_battle IS '坦克动荡游戏记录表';
+COMMENT ON COLUMN tank_battle.deaths IS '死亡次数';
 
-COMMENT ON COLUMN tank_battle.user_id IS '用户ID';
+COMMENT ON COLUMN tank_battle.assists IS '助攻数';
 
-COMMENT ON COLUMN tank_battle.room_id IS '房间ID';
-
-COMMENT ON COLUMN tank_battle.duration IS '游戏时长(秒)';
-
-COMMENT ON COLUMN tank_battle.status IS '状态:0-进行中,1-已结束';
-
-COMMENT ON COLUMN tank_battle.start_time IS '开始时间';
-
-COMMENT ON COLUMN tank_battle.end_time IS '结束时间';
-
-COMMENT ON COLUMN tank_battle.create_time IS '创建时间';
-
--- ==================== 测试表 ====================
-CREATE TABLE test (
-    id BIGSERIAL PRIMARY KEY,
-    content TEXT,
-    time TIMESTAMP
-);
+COMMENT ON COLUMN tank_battle.score IS '得分(用于排行榜)';
 
 -- ==================== 触发器函数 ====================
 
