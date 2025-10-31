@@ -37,7 +37,7 @@ public class Friend {
     /**
      * 创建时间
      */
-    @TableField(value = "created_time", fill = FieldFill.INSERT)
+    @TableField("created_time")
     private LocalDateTime createdTime;
 
     /**

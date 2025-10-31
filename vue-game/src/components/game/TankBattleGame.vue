@@ -118,6 +118,13 @@
                 </div>
 
                 <div class="game-controls">
+                    <div class="ping-display">
+                        <span class="ping-label">延迟:</span>
+                        <span class="ping-value"
+                            :class="{ 'ping-good': ping < 50, 'ping-ok': ping >= 50 && ping < 100, 'ping-bad': ping >= 100 }">
+                            {{ ping }}ms
+                        </span>
+                    </div>
                     <button @click="exitGame" class="control-btn exit-btn">退出游戏</button>
                 </div>
 
@@ -143,11 +150,17 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useUserStore } from '../../config/user'
+import { storeToRefs } from 'pinia'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
+const { user } = storeToRefs(userStore)
+const wsService = inject('wsService')
 
 // Konva 舞台引用
 const stageRef = ref(null)
@@ -155,9 +168,15 @@ const stageRef = ref(null)
 // 游戏状态
 const gameStarted = ref(false)
 const currentMode = ref(route.query.mode || '1v1v1v1')
+const roomCode = ref(route.query.roomCode || '')
+const gameId = ref(route.query.gameId || '')
 
 // 地图数据
 const currentMapData = ref(null)
+
+// 网络延迟
+const ping = ref(0)
+const lastPingTime = ref(0)
 
 // 玩家数据
 const players = ref([
@@ -255,12 +274,9 @@ const keys = ref({
     k: false
 })
 
-let animationFrameId = null
-let lastTime = 0
-const TARGET_FPS = 60
-const FRAME_TIME = 1000 / TARGET_FPS  // 约16.67ms
-const MAX_DELTA_TIME = 100  // 最大帧间隔100ms，防止穿墙
-let lastShootKeyState = false  // 用于K键单次触发
+// 移除客户端游戏循环相关变量
+// 改为接收服务端状态
+let sendInputInterval = null  // 发送玩家输入的定时器
 
 // 加载地图
 async function loadMap() {
@@ -386,190 +402,8 @@ function circleCircleCollision(c1, c2) {
     return distance < (c1.radius + c2.radius)
 }
 
-// 创建爆炸特效
-function createExplosion(x, y) {
-    const explosion = {
-        id: explosionIdCounter.value++,
-        x,
-        y,
-        radius: 5,
-        opacity: 1,
-        createTime: Date.now()
-    }
-    explosions.value.push(explosion)
-}
-
-// 创建履带痕迹
-function createTrackMark(tank) {
-    const now = Date.now()
-    if (now - tank.lastTrackTime < 100) return  // 每100ms留一次痕迹
-
-    tank.lastTrackTime = now
-
-    const track = {
-        id: trackIdCounter.value++,
-        points: [tank.x, tank.y, tank.x, tank.y],  // 起点和终点相同（点）
-        color: getColorHex(tank.color),
-        opacity: 0.3,
-        createTime: now
-    }
-
-    trackMarks.value.push(track)
-
-    // 限制履带数量，防止内存泄漏
-    if (trackMarks.value.length > 200) {
-        trackMarks.value.shift()
-    }
-}
-
-// 坦克射击
-function tankShoot(tank) {
-    const now = Date.now()
-    if (now - tank.lastShootTime < GAME_CONFIG.tank.shootCooldown) return
-    if (tank.bullets.length >= GAME_CONFIG.tank.maxBullets) return
-    if (tank.isDead) return
-
-    tank.lastShootTime = now
-
-    // 计算子弹发射位置
-    const angle = tank.rotation * Math.PI / 180
-    const spawnDistance = GAME_CONFIG.tank.bulletSpawnDistance
-    const bulletX = tank.x + Math.cos(angle) * spawnDistance
-    const bulletY = tank.y + Math.sin(angle) * spawnDistance
-
-    // 检查发射路径是否被墙阻挡（检查从坦克到子弹生成点的整条路径）
-    let isBlocked = false
-
-    // 沿着发射路径检测多个点（每隔4像素检测一次）
-    const checkPoints = Math.ceil(spawnDistance / 4)
-    for (let i = 0; i <= checkPoints; i++) {
-        const t = i / checkPoints  // 0 到 1
-        const checkX = tank.x + Math.cos(angle) * spawnDistance * t
-        const checkY = tank.y + Math.sin(angle) * spawnDistance * t
-
-        for (const wall of walls.value) {
-            if (rectCircleCollision(wall, { x: checkX, y: checkY, radius: GAME_CONFIG.bullet.radius })) {
-                isBlocked = true
-                break
-            }
-        }
-
-        if (isBlocked) break
-    }
-
-    if (isBlocked) return
-
-    // 创建子弹
-    const bullet = {
-        id: bulletIdCounter.value++,
-        x: bulletX,
-        y: bulletY,
-        vx: Math.cos(angle) * GAME_CONFIG.bullet.speed,
-        vy: Math.sin(angle) * GAME_CONFIG.bullet.speed,
-        ownerId: tank.playerId,
-        bounceCount: 0,
-        createTime: now,
-        active: true,
-        opacity: 1
-    }
-
-    tank.bullets.push(bullet)
-    updateTankStats(tank)
-}
-
-// 坦克受伤
-function tankTakeDamage(tank, damage, attackerId) {
-    if (tank.isDead) return
-
-    tank.health = Math.max(0, tank.health - damage)
-
-    // 受伤闪烁特效
-    tank.flashOpacity = 0.3
-
-    if (tank.health <= 0) {
-        tankDie(tank, attackerId)
-    }
-
-    updateTankStats(tank)
-}
-
-// 坦克死亡
-function tankDie(tank, killerId) {
-    tank.isDead = true
-    tank.deaths++
-
-    // 给击杀者加分
-    if (killerId !== tank.playerId && killerId !== null) {
-        const killer = tanks.value.find(t => t.playerId === killerId)
-        if (killer) {
-            killer.kills++
-            killer.score += 100
-            updateTankStats(killer)
-        }
-    }
-
-    // 清理所有子弹
-    tank.bullets = []
-
-    updateTankStats(tank)
-
-    // 3秒后重生
-    let respawnCounter = 3
-    players.value[tank.playerId].respawnTime = respawnCounter
-
-    const respawnInterval = setInterval(() => {
-        respawnCounter--
-        players.value[tank.playerId].respawnTime = respawnCounter
-
-        if (respawnCounter <= 0) {
-            clearInterval(respawnInterval)
-            tankRespawn(tank)
-        }
-    }, 1000)
-}
-
-// 坦克重生
-function tankRespawn(tank) {
-    const spawnPoints = [
-        { x: 100, y: 100 },
-        { x: 1100, y: 100 },
-        { x: 100, y: 700 },
-        { x: 1100, y: 700 },
-        { x: 600, y: 400 }
-    ]
-
-    // 打乱
-    for (let i = spawnPoints.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [spawnPoints[i], spawnPoints[j]] = [spawnPoints[j], spawnPoints[i]]
-    }
-
-    // 找安全点
-    let spawn = spawnPoints[0]
-    const otherTanks = tanks.value.filter(t => t !== tank && !t.isDead)
-
-    for (const point of spawnPoints) {
-        let isSafe = true
-        for (const otherTank of otherTanks) {
-            const distance = Math.hypot(point.x - otherTank.x, point.y - otherTank.y)
-            if (distance < 80) {
-                isSafe = false
-                break
-            }
-        }
-        if (isSafe) {
-            spawn = point
-            break
-        }
-    }
-
-    tank.x = spawn.x
-    tank.y = spawn.y
-    tank.health = tank.maxHealth
-    tank.isDead = false
-
-    updateTankStats(tank)
-}
+// 客户端不再处理射击、受伤、死亡、重生等逻辑
+// 这些都由服务端计算并通过WebSocket广播
 
 // 更新坦克统计
 function updateTankStats(tank) {
@@ -580,360 +414,127 @@ function updateTankStats(tank) {
     players.value[tank.playerId].score = tank.score
 }
 
-// AI 逻辑
-function findNearestEnemy(tank) {
-    let nearestEnemy = null
-    let minDistance = Infinity
+// AI逻辑已移至服务端，客户端不再处理
 
-    for (const other of tanks.value) {
-        if (other === tank || other.isDead) continue
+// ========== 客户端只负责发送操作和接收状态，不再计算游戏逻辑 ==========
 
-        const distance = Math.hypot(tank.x - other.x, tank.y - other.y)
+// 发送玩家操作到服务端
+function sendPlayerAction() {
+    if (!wsService || !roomCode.value) return
 
-        if (distance < minDistance) {
-            minDistance = distance
-            nearestEnemy = other
-        }
-    }
-
-    return { enemy: nearestEnemy, distance: minDistance }
-}
-
-function updateAI(tank, deltaTime) {
-    const now = Date.now()
-    const { enemy: nearestEnemy, distance: minDistance } = findNearestEnemy(tank)
-
-    if (nearestEnemy) {
-        const angleToEnemy = Math.atan2(nearestEnemy.y - tank.y, nearestEnemy.x - tank.x)
-        tank.rotation = angleToEnemy * 180 / Math.PI
-
-        // AI 移动策略
-        if (minDistance < 150) {
-            // 后退
-            const dodgeAngle = angleToEnemy + Math.PI + (Math.random() - 0.5) * Math.PI / 2
-            tank.vx = Math.cos(dodgeAngle) * GAME_CONFIG.tank.speed * 0.8
-            tank.vy = Math.sin(dodgeAngle) * GAME_CONFIG.tank.speed * 0.8
-        } else if (minDistance > 400) {
-            // 接近
-            tank.vx = Math.cos(angleToEnemy) * GAME_CONFIG.tank.speed * 0.6
-            tank.vy = Math.sin(angleToEnemy) * GAME_CONFIG.tank.speed * 0.6
-        } else {
-            // 横向移动
-            const strafeAngle = angleToEnemy + Math.PI / 2
-            tank.vx = Math.cos(strafeAngle) * GAME_CONFIG.tank.speed * 0.5
-            tank.vy = Math.sin(strafeAngle) * GAME_CONFIG.tank.speed * 0.5
-        }
-
-        // AI 射击
-        if (now - tank.aiShootTimer > 1200 + Math.random() * 1500) {
-            if (Math.random() > 0.4) {
-                tankShoot(tank)
-                tank.aiShootTimer = now
-            }
-        }
-    } else {
-        // 随机移动
-        if (now - tank.aiChangeDirectionTimer > 2000) {
-            tank.aiDirection = {
-                x: (Math.random() - 0.5) * 2,
-                y: (Math.random() - 0.5) * 2
-            }
-            tank.aiChangeDirectionTimer = now
-        }
-
-        tank.vx = tank.aiDirection.x * GAME_CONFIG.tank.speed * 0.3
-        tank.vy = tank.aiDirection.y * GAME_CONFIG.tank.speed * 0.3
-
-        if (tank.aiDirection.x !== 0 || tank.aiDirection.y !== 0) {
-            tank.rotation = Math.atan2(tank.aiDirection.y, tank.aiDirection.x) * 180 / Math.PI
-        }
-    }
-}
-
-// 更新玩家坦克
-function updatePlayer(tank, deltaTime) {
-    const dt = deltaTime / 1000  // 转换为秒
-
-    // W/S 控制速度（前进/后退）
-    let speed = 0
-    if (keys.value.w) speed = GAME_CONFIG.tank.speed      // 前进
-    if (keys.value.s) speed = -GAME_CONFIG.tank.speed     // 后退
-
-    // A/D 控制旋转角度（基于时间，保证不同帧率下旋转速度一致）
-    const rotationDelta = GAME_CONFIG.tank.rotationSpeed * dt  // 度/秒 × 秒 = 度
-    if (keys.value.a) tank.rotation -= rotationDelta      // 左转
-    if (keys.value.d) tank.rotation += rotationDelta      // 右转
-
-    // 根据当前角度和速度计算速度向量
-    if (speed === 0) {
-        // 没有前进/后退时停止移动
-        tank.vx = 0
-        tank.vy = 0
-    } else {
-        const angleInRadians = tank.rotation * Math.PI / 180
-        tank.vx = Math.cos(angleInRadians) * speed
-        tank.vy = Math.sin(angleInRadians) * speed
-    }
-
-    // 射击（修复K键长按问题 - 只在按下时触发一次）
-    if (keys.value.k && !lastShootKeyState) {
-        tankShoot(tank)
-    }
-    lastShootKeyState = keys.value.k
-}
-
-// 检查墙壁碰撞
-function checkWallCollision(x, y) {
-    const tankRect = { x, y, width: GAME_CONFIG.tank.collisionSize, height: GAME_CONFIG.tank.collisionSize }
-    for (const wall of walls.value) {
-        if (rectRectCollision(tankRect, wall)) return true
-    }
-    return false
-}
-
-// 检查坦克间碰撞
-function checkTankCollision(tank, x, y) {
-    const rect1 = { x, y, width: GAME_CONFIG.tank.collisionSize, height: GAME_CONFIG.tank.collisionSize }
-    for (const other of tanks.value) {
-        if (other === tank || other.isDead) continue
-        const rect2 = { x: other.x, y: other.y, width: GAME_CONFIG.tank.collisionSize, height: GAME_CONFIG.tank.collisionSize }
-        if (rectRectCollision(rect1, rect2)) return true
-    }
-    return false
-}
-
-// 更新坦克位置
-function updateTankPosition(tank, deltaTime) {
-    if (tank.isDead) return
-
-    const dt = deltaTime / 1000
-    let newX = tank.x + tank.vx * dt
-    let newY = tank.y + tank.vy * dt
-
-    // 世界边界检测
-    const halfSize = GAME_CONFIG.tank.collisionSize / 2
-    newX = Math.max(halfSize, Math.min(GAME_CONFIG.map.width - halfSize, newX))
-    newY = Math.max(halfSize, Math.min(GAME_CONFIG.map.height - halfSize, newY))
-
-    // 碰撞检测
-    const collided = checkWallCollision(newX, newY) || checkTankCollision(tank, newX, newY)
-
-    if (!collided) {
-        tank.x = newX
-        tank.y = newY
-
-        // 移动时创建履带痕迹
-        if (tank.vx !== 0 || tank.vy !== 0) {
-            createTrackMark(tank)
-        }
-    }
-}
-
-// 处理子弹世界边界反弹（改进版：额外1像素确保完全分离）
-function handleBulletWorldBounds(bullet) {
-    let bounced = false
-    const radius = GAME_CONFIG.bullet.radius
-
-    if (bullet.x - radius <= 0) {
-        bullet.x = radius + 1  // 额外1像素
-        bullet.vx = Math.abs(bullet.vx)
-        bounced = true
-    } else if (bullet.x + radius >= GAME_CONFIG.map.width) {
-        bullet.x = GAME_CONFIG.map.width - radius - 1  // 额外1像素
-        bullet.vx = -Math.abs(bullet.vx)
-        bounced = true
-    }
-
-    if (bullet.y - radius <= 0) {
-        bullet.y = radius + 1  // 额外1像素
-        bullet.vy = Math.abs(bullet.vy)
-        bounced = true
-    } else if (bullet.y + radius >= GAME_CONFIG.map.height) {
-        bullet.y = GAME_CONFIG.map.height - radius - 1  // 额外1像素
-        bullet.vy = -Math.abs(bullet.vy)
-        bounced = true
-    }
-
-    return bounced
-}
-
-// 应用墙壁反弹效果
-function applyWallBounce(bullet, wall, dx, dy) {
-    const halfWidth = wall.width / 2
-    const halfHeight = wall.height / 2
-    const radius = GAME_CONFIG.bullet.radius
-
-    // 计算穿透深度
-    const penetrationX = (halfWidth + radius) - Math.abs(dx)
-    const penetrationY = (halfHeight + radius) - Math.abs(dy)
-
-    // 根据穿透深度最小的方向反弹
-    if (penetrationX < penetrationY) {
-        // 水平碰撞
-        bullet.vx = -bullet.vx
-        bullet.x = wall.x + (dx > 0 ? 1 : -1) * (halfWidth + radius + 1)
-    } else {
-        // 垂直碰撞
-        bullet.vy = -bullet.vy
-        bullet.y = wall.y + (dy > 0 ? 1 : -1) * (halfHeight + radius + 1)
-    }
-}
-
-// 处理子弹墙壁反弹（改进版：精确反弹，防止穿墙和陷入）
-function handleBulletWallBounce(bullet) {
-    for (const wall of walls.value) {
-        if (rectCircleCollision(wall, { x: bullet.x, y: bullet.y, radius: GAME_CONFIG.bullet.radius })) {
-            const dx = bullet.x - wall.x
-            const dy = bullet.y - wall.y
-            applyWallBounce(bullet, wall, dx, dy)
-            return true
-        }
-    }
-    return false
-}
-
-// 检查子弹坦克碰撞
-function checkBulletTankCollision(bullet) {
-    for (const targetTank of tanks.value) {
-        if (targetTank.isDead) continue
-
-        const tankCircle = {
-            x: targetTank.x,
-            y: targetTank.y,
-            radius: GAME_CONFIG.tank.collisionSize / 2
-        }
-
-        if (circleCircleCollision(
-            { x: bullet.x, y: bullet.y, radius: GAME_CONFIG.bullet.radius },
-            tankCircle
-        )) {
-            tankTakeDamage(targetTank, GAME_CONFIG.bullet.damage, bullet.ownerId)
-            createExplosion(bullet.x, bullet.y)  // 创建爆炸特效
-            return true
-        }
-    }
-    return false
-}
-
-// 更新单个子弹
-function updateSingleBullet(bullet, dt, now) {
-    if (!bullet.active) return false
-
-    // 检查存活时间
-    if (now - bullet.createTime > GAME_CONFIG.bullet.lifeTime) {
-        bullet.active = false
-        return false
-    }
-
-    // 更新位置
-    bullet.x += bullet.vx * dt
-    bullet.y += bullet.vy * dt
-
-    // 边界和墙壁反弹
-    let bounced = handleBulletWorldBounds(bullet)
-    if (handleBulletWallBounce(bullet)) {
-        bounced = true
-    }
-
-    if (bounced) {
-        bullet.bounceCount++
-        if (bullet.bounceCount >= GAME_CONFIG.bullet.maxBounces) {
-            bullet.active = false
-            return false
-        }
-    }
-
-    // 坦克碰撞
-    if (checkBulletTankCollision(bullet)) {
-        bullet.active = false
-        return false
-    }
-
-    return true
-}
-
-// 更新子弹
-function updateBullets(deltaTime) {
-    const dt = deltaTime / 1000
-    const now = Date.now()
-
-    for (const tank of tanks.value) {
-        tank.bullets = tank.bullets.filter(bullet => updateSingleBullet(bullet, dt, now))
-        updateTankStats(tank)
-    }
-}
-
-// 更新特效
-function updateEffects(deltaTime) {
-    const now = Date.now()
-    const dt = deltaTime / 1000
-
-    // 更新受伤闪烁（快速恢复）
-    for (const tank of tanks.value) {
-        if (tank.flashOpacity < 1) {
-            tank.flashOpacity += dt * 5  // 0.2秒恢复
-            if (tank.flashOpacity > 1) tank.flashOpacity = 1
-        }
-    }
-
-    // 更新爆炸特效（扩散并消失）
-    explosions.value = explosions.value.filter(exp => {
-        const age = now - exp.createTime
-        if (age > 300) return false  // 0.3秒后消失
-
-        exp.radius += dt * 50  // 扩散
-        exp.opacity = 1 - (age / 300)  // 渐隐
-        return true
-    })
-
-    // 更新履带痕迹（渐隐）
-    trackMarks.value = trackMarks.value.filter(track => {
-        const age = now - track.createTime
-        if (age > 3000) return false  // 3秒后完全消失
-
-        track.opacity = 0.3 * (1 - age / 3000)  // 渐隐
-        return true
+    wsService.send(`/app/tankbattle/${roomCode.value}/playerAction`, {
+        userId: user.value?.id,
+        keys: keys.value,
+        timestamp: Date.now()
     })
 }
 
-// 游戏主循环（60FPS锁定）
-function gameLoop(currentTime) {
-    if (!lastTime) lastTime = currentTime
-    let deltaTime = currentTime - lastTime
+// 更新延迟
+function updatePing(timestamp) {
+    if (!timestamp) return
+    const now = Date.now()
+    ping.value = now - lastPingTime.value
+    lastPingTime.value = now
+}
 
-    // 帧率限制：如果距离上一帧时间小于目标帧时间，跳过这一帧
-    if (deltaTime < FRAME_TIME) {
-        animationFrameId = requestAnimationFrame(gameLoop)
-        return
+// 更新坦克状态
+function updateTanksFromServer(serverTanks) {
+    if (!serverTanks || !Array.isArray(serverTanks)) return
+
+    for (let index = 0; index < serverTanks.length; index++) {
+        const serverTank = serverTanks[index]
+        if (!tanks.value[index]) continue
+
+        tanks.value[index].x = serverTank.x
+        tanks.value[index].y = serverTank.y
+        tanks.value[index].rotation = serverTank.r
+        tanks.value[index].health = serverTank.h
+        tanks.value[index].isDead = serverTank.d === 1
+
+        if (players.value[index]) {
+            players.value[index].health = serverTank.h
+        }
     }
+}
 
-    // 限制最大deltaTime，防止穿墙
-    if (deltaTime > MAX_DELTA_TIME) {
-        deltaTime = MAX_DELTA_TIME
+// 更新子弹状态
+function updateBulletsFromServer(serverBullets) {
+    if (!serverBullets || !Array.isArray(serverBullets)) return
+
+    const newBullets = serverBullets.map(b => ({
+        id: b.id,
+        x: b.x,
+        y: b.y,
+        vx: b.vx,
+        vy: b.vy,
+        opacity: 1,
+        active: true
+    }))
+
+    if (tanks.value[0]) {
+        tanks.value[0].bullets = newBullets
     }
+}
 
-    lastTime = currentTime
+// 处理服务端广播的游戏状态
+function handleGameState(data) {
+    try {
+        updatePing(data.timestamp)
+        updateTanksFromServer(data.tanks)
+        updateBulletsFromServer(data.bullets)
+    } catch (error) {
+        console.error('处理游戏状态失败:', error)
+    }
+}
 
-    // 更新坦克
-    for (const tank of tanks.value) {
-        if (tank.isDead) continue
+// 处理游戏事件（击杀、死亡、重生）
+function handleGameEvent(data) {
+    try {
+        if (data.type === 'kill') {
+            ElMessage.success(`玩家 ${data.killerId} 击杀了玩家 ${data.victimId}`)
+        } else if (data.type === 'death') {
+            ElMessage.warning(`玩家 ${data.playerId} 阵亡，${data.respawnTime}秒后重生`)
+            // 更新重生倒计时
+            if (players.value[data.playerId]) {
+                players.value[data.playerId].respawnTime = data.respawnTime
+            }
+        } else if (data.type === 'respawn') {
+            ElMessage.info(`玩家 ${data.playerId} 已重生`)
+            // 更新玩家状态
+            const tank = tanks.value.find(t => t.playerId === data.playerId)
+            if (tank) {
+                tank.x = data.x
+                tank.y = data.y
+                tank.health = data.health
+                tank.isDead = false
+            }
+        }
+    } catch (error) {
+        console.error('处理游戏事件失败:', error)
+    }
+}
 
-        if (tank.isPlayer) {
-            updatePlayer(tank, deltaTime)
-        } else {
-            updateAI(tank, deltaTime)
+// 处理游戏结束
+function handleGameEnd(data) {
+    try {
+        ElMessage.success('游戏结束！')
+
+        // 停止发送输入
+        if (sendInputInterval) {
+            clearInterval(sendInputInterval)
+            sendInputInterval = null
         }
 
-        updateTankPosition(tank, deltaTime)
+        // 显示结算界面（暂时简单处理，后续可以做成弹窗）
+        console.log('游戏结束数据:', data)
+
+        // 3秒后返回房间
+        setTimeout(() => {
+            router.push('/game/tank-battle')
+        }, 3000)
+    } catch (error) {
+        console.error('处理游戏结束失败:', error)
     }
-
-    // 更新子弹
-    updateBullets(deltaTime)
-
-    // 更新特效
-    updateEffects(deltaTime)
-
-    animationFrameId = requestAnimationFrame(gameLoop)
 }
 
 // 键盘事件
@@ -964,7 +565,7 @@ const exitGame = () => {
     router.push('/game/tank-battle')
 }
 
-// 初始化游戏
+// 初始化游戏（客户端只负责初始化渲染，不运行游戏逻辑）
 const initGame = async () => {
     await loadMap()
     initWalls()
@@ -972,8 +573,41 @@ const initGame = async () => {
 
     gameStarted.value = true
 
-    // 启动游戏循环
-    animationFrameId = requestAnimationFrame(gameLoop)
+    // 订阅WebSocket频道
+    if (wsService && roomCode.value) {
+        // 订阅游戏状态广播（60FPS）
+        wsService.subscribe(`/topic/tankbattle/${roomCode.value}/gameState`, (msg) => {
+            try {
+                const data = JSON.parse(msg.body)
+                handleGameState(data)
+            } catch (e) {
+                console.error('处理游戏状态消息失败:', e)
+            }
+        })
+
+        // 订阅游戏事件（击杀、死亡、重生）
+        wsService.subscribe(`/topic/tankbattle/${roomCode.value}/gameEvent`, (msg) => {
+            try {
+                const data = JSON.parse(msg.body)
+                handleGameEvent(data)
+            } catch (e) {
+                console.error('处理游戏事件消息失败:', e)
+            }
+        })
+
+        // 订阅游戏结束事件
+        wsService.subscribe(`/topic/tankbattle/${roomCode.value}/gameEnd`, (msg) => {
+            try {
+                const data = JSON.parse(msg.body)
+                handleGameEnd(data)
+            } catch (e) {
+                console.error('处理游戏结束消息失败:', e)
+            }
+        })
+
+        // 启动玩家输入发送定时器（60FPS）
+        sendInputInterval = setInterval(sendPlayerAction, 16.67)
+    }
 }
 
 onMounted(async () => {
@@ -985,11 +619,20 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-    // 清理
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId)
+    // 清理定时器
+    if (sendInputInterval) {
+        clearInterval(sendInputInterval)
+        sendInputInterval = null
     }
 
+    // 取消WebSocket订阅
+    if (wsService && roomCode.value) {
+        wsService.unsubscribe(`/topic/tankbattle/${roomCode.value}/gameState`)
+        wsService.unsubscribe(`/topic/tankbattle/${roomCode.value}/gameEvent`)
+        wsService.unsubscribe(`/topic/tankbattle/${roomCode.value}/gameEnd`)
+    }
+
+    // 移除键盘监听
     globalThis.removeEventListener('keydown', handleKeyDown)
     globalThis.removeEventListener('keyup', handleKeyUp)
 })
@@ -1143,6 +786,39 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.ping-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: #fff;
+    border: 2px solid #000;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.ping-label {
+    color: #666;
+}
+
+.ping-value {
+    font-family: monospace;
+    font-size: 14px;
+}
+
+.ping-good {
+    color: #22c55e;
+}
+
+.ping-ok {
+    color: #eab308;
+}
+
+.ping-bad {
+    color: #ef4444;
 }
 
 .control-btn {

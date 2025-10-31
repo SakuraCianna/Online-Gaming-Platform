@@ -1,7 +1,6 @@
 package com.game.controller;
 
 import com.game.entity.Minesweeper;
-import com.game.mapper.MinesweeperMapper;
 import com.game.service.MinesweeperService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,11 +11,9 @@ import java.util.Map;
 @RequestMapping("/api/minesweeper")
 public class MinesweeperController {
     private final MinesweeperService minesweeperService;
-    private final MinesweeperMapper minesweeperMapper;
 
-    public MinesweeperController(MinesweeperService minesweeperService,MinesweeperMapper minesweeperMapper) {
+    public MinesweeperController(MinesweeperService minesweeperService) {
         this.minesweeperService = minesweeperService;
-        this.minesweeperMapper = minesweeperMapper;
     }
 
     @PostMapping("/save")
@@ -27,13 +24,14 @@ public class MinesweeperController {
     }
 
     @GetMapping("/getInProgress")
-    public Minesweeper getInProgress(@RequestParam long user_id) {
-        return minesweeperMapper.selectInProgressByUserId(user_id);
+    public Minesweeper getInProgress(@RequestParam("user_id") long userId) {
+        return minesweeperService.getInProgressGame(userId);
     }
 
     @DeleteMapping("/delete")
-    public ResponseEntity<Map<String, Object>> deleteById(@RequestParam long id) {
-        Map<String, Object> result = minesweeperService.deleteById(id);
+    public ResponseEntity<Map<String, Object>> deleteById(@RequestParam long id,
+            @RequestParam(value = "user_id", required = false) Long userId) {
+        Map<String, Object> result = minesweeperService.deleteById(id, userId);
         result.put("code", 200);
         return ResponseEntity.ok(result);
     }

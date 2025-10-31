@@ -1,11 +1,13 @@
 package com.game.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 游戏房间表
@@ -67,8 +69,8 @@ public class GameRoom {
     /**
      * 游戏配置(JSON格式)
      */
-    @TableField("game_config")
-    private String gameConfig;
+    @TableField(value = "game_config", typeHandler = JacksonTypeHandler.class)
+    private Map<String, Object> gameConfig;
 
     /**
      * 胜利者ID

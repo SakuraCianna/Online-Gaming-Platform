@@ -194,4 +194,87 @@ public class UserService {
         return !isBasicQQ && !isVipQQ;
     }
 
+    /**
+     * 更新用户积分（迁移自 PostgreSQL 触发器逻辑）
+     * 
+     * @param userId     用户ID
+     * @param score      游戏得分
+     * @param difficulty 游戏难度
+     * @param isWin      是否胜利
+     */
+    public void updateUserScore(Long userId, Integer score, String difficulty, boolean isWin) {
+        if (userId == null || score == null || difficulty == null) {
+            return;
+        }
+
+        // 根据游戏结果设定基础分数计算规则
+        int baseScore;
+        if (isWin) {
+            // 赢了：得分除以50
+            baseScore = score / 50;
+        } else {
+            // 输了：得分除以150
+            baseScore = score / 150;
+        }
+
+        // 根据难度设定倍率
+        double difficultyMultiplier;
+        switch (difficulty.toLowerCase()) {
+            case "easy":
+                difficultyMultiplier = 1.0;
+                break;
+            case "normal":
+                difficultyMultiplier = 1.5;
+                break;
+            case "hard":
+                difficultyMultiplier = 2.0;
+                break;
+            default:
+                difficultyMultiplier = 1.0;
+        }
+
+        // 计算最终积分（只保留整数部分）
+        int finalScore = (int) Math.floor(baseScore * difficultyMultiplier);
+
+        // 更新用户总积分
+        User user = userMapper.selectById(userId);
+        if (user != null) {
+            long newTotalScore = user.getTotalScore() + finalScore;
+
+            // 计算新的等级
+            int newLevel = calculateLevel(newTotalScore);
+
+            // 更新数据库
+            user.setTotalScore(newTotalScore);
+            user.setCurrentLevel(newLevel);
+            userMapper.updateById(user);
+        }
+    }
+
+    /**
+     * 根据积分计算用户等级（迁移自 PostgreSQL 触发器逻辑）
+     * 
+     * @param totalScore 总积分
+     * @return 等级
+     */
+    private int calculateLevel(long totalScore) {
+        int level = 1;
+
+        // 使用提供的算法计算当前等级
+        // 公式：level * (100 + 50 * (level - 1))
+        while (true) {
+            // 计算达到下一级所需的总积分
+            int nextLevelScore = level * (100 + 50 * (level - 1));
+
+            // 如果用户积分不足以达到下一级，则退出循环
+            if (totalScore < nextLevelScore) {
+                break;
+            }
+
+            level++;
+        }
+
+        return level;
+    }
+
 }

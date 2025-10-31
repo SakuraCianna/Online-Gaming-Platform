@@ -12,7 +12,7 @@ import java.util.List;
 public interface FriendMapper extends BaseMapper<Friend> {
         @Select("SELECT u.id AS id, u.username AS name, u.avatar AS avatar, u.current_level AS level, f.status AS status, f.message AS message "
                         +
-                        "FROM friend f JOIN \"user\" u ON u.id = f.friend_id " +
+                        "FROM friend f JOIN `user` u ON u.id = f.friend_id " +
                         "WHERE f.user_id = #{userId} " +
                         "ORDER BY f.sort_rank , f.created_time DESC")
         List<FriendVO> getAllFriendVO(Page<FriendVO> page, @Param("userId") Long userId);
@@ -23,9 +23,9 @@ public interface FriendMapper extends BaseMapper<Friend> {
 
         @Select("SELECT u.id AS id,u.username AS name,u.avatar AS avatar,u.current_level AS level, f.status AS status, f.message AS message "
                         +
-                        "FROM friend f JOIN \"user\" u ON u.id=f.friend_id " +
-                        "WHERE f.user_id=#{userId} AND (u.username LIKE CONCAT('%',#{keyword},'%') " +
-                        "OR u.id LIKE CONCAT('%',#{keyword},'%')) " +
+                        "FROM friend f JOIN `user` u ON u.id=f.friend_id " +
+                        "WHERE f.user_id=#{userId} AND (u.username LIKE CONCAT('%', #{keyword}, '%') " +
+                        "OR CONCAT(u.id, '') LIKE CONCAT('%', #{keyword}, '%')) " +
                         "ORDER BY f.sort_rank,f.created_time DESC")
         List<FriendVO> selectFriendVOPage(Page<FriendVO> mpPage,
                         @Param("userId") Long userId,

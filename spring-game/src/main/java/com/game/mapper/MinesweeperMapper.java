@@ -12,7 +12,7 @@ public interface MinesweeperMapper extends BaseMapper<Minesweeper> {
                         +
                         "VALUES (#{insert.user_id}, #{insert.difficulty}, #{insert.board_width}, #{insert.board_height}, "
                         +
-                        "#{insert.mine_count}, #{insert.correct_flags}, #{insert.duration}, #{insert.status}, CAST(#{insert.game_data} AS jsonb))")
+                        "#{insert.mine_count}, #{insert.correct_flags}, #{insert.duration}, #{insert.status}, #{insert.game_data})")
         int insertMinesweeperRecord(@Param("insert") Map<String, Object> insert);
 
         @Select("SELECT * FROM minesweeper WHERE user_id = #{userId} AND status = 0")
@@ -21,14 +21,14 @@ public interface MinesweeperMapper extends BaseMapper<Minesweeper> {
         @Update("UPDATE minesweeper SET difficulty = #{update.difficulty}, board_width = #{update.board_width}, " +
                         "board_height = #{update.board_height}, mine_count = #{update.mine_count}, correct_flags = #{update.correct_flags}, "
                         +
-                        "duration = #{update.duration}, status = #{update.status}, game_data = CAST(#{update.game_data} AS jsonb) "
+                        "duration = #{update.duration}, status = #{update.status}, game_data = #{update.game_data} "
                         +
                         "WHERE id = #{update.id}")
         int updateMinesweeperRecord(@Param("update") Map<String, Object> update);
 
         // 分页查询用户游戏记录
         @Select("SELECT * FROM minesweeper WHERE user_id = #{userId} " +
-                        "ORDER BY create_time DESC LIMIT #{size} OFFSET #{offset}")
+                        "ORDER BY create_time DESC LIMIT #{offset}, #{size}")
         List<Minesweeper> selectByUserIdWithPage(@Param("userId") Long userId,
                         @Param("offset") Integer offset,
                         @Param("size") Integer size);

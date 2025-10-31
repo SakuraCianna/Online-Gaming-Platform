@@ -78,7 +78,7 @@ public class GameRoomService {
                     gomokuConfig.put("boardSize", "17x17");
                     gomokuConfig.put("timeLimit", 0);
                     gomokuConfig.put("blackFirst", true);
-                    room.setGameConfig(objectMapper.writeValueAsString(gomokuConfig));
+                    room.setGameConfig(gomokuConfig);
                     break;
 
                 case "tank-battle":
@@ -89,7 +89,7 @@ public class GameRoomService {
                     tankConfig.put("map", "classic");
                     tankConfig.put("respawnTime", 3);
                     tankConfig.put("friendlyFire", false);
-                    room.setGameConfig(objectMapper.writeValueAsString(tankConfig));
+                    room.setGameConfig(tankConfig);
                     break;
 
                 default:
@@ -97,10 +97,10 @@ public class GameRoomService {
                     room.setMaxPlayers(2);
                     room.setMinPlayers(2);
                     room.setTeamMode(0);
-                    room.setGameConfig("{}");
+                    room.setGameConfig(new HashMap<>());
             }
         } catch (Exception e) {
-            throw new BusinessException(500, "游戏配置序列化失败: " + e.getMessage());
+            throw new BusinessException(500, "游戏配置设置失败: " + e.getMessage());
         }
 
         // 存储到Redis（房间信息），直接存对象（由 RedisConfig 的 Jackson2 序列化）
@@ -235,7 +235,8 @@ public class GameRoomService {
                 Map<String, Object> inviteMessage = new HashMap<>();
                 inviteMessage.put("inviterId", userId);
                 inviteMessage.put("inviterName", inviter.getUsername());
-                inviteMessage.put("inviterAvatar", inviter.getAvatar() != null ? inviter.getAvatar() : "/image/default-avatar.jpg");
+                inviteMessage.put("inviterAvatar",
+                        inviter.getAvatar() != null ? inviter.getAvatar() : "/image/default-avatar.jpg");
                 inviteMessage.put("roomCode", roomCode);
                 inviteMessage.put("gameName", gameName);
                 inviteMessage.put("timestamp", System.currentTimeMillis());
@@ -458,7 +459,8 @@ public class GameRoomService {
 
                         playerInfo.put("userId", player.getUserId());
                         playerInfo.put("username", user.getUsername());
-                        playerInfo.put("avatar", user.getAvatar() != null ? user.getAvatar() : "/image/default-avatar.jpg");
+                        playerInfo.put("avatar",
+                                user.getAvatar() != null ? user.getAvatar() : "/image/default-avatar.jpg");
                         playerInfo.put("isAi", 0);
                     }
 

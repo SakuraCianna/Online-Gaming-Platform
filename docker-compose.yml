@@ -1,19 +1,4 @@
 services:
-  postgres:
-    image: postgres:18.0
-    container_name: game-postgres
-    environment:
-      POSTGRES_DB: game
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./postgres-data:/var/lib/postgresql
-      - ./game.sql:/docker-entrypoint-initdb.d/init.sql
-    restart: "no"
-
   redis:
     image: redis:7-alpine
     container_name: game-redis
@@ -44,6 +29,5 @@ services:
       - ./nginx/logs:/var/log/nginx
     restart: "no"
     depends_on:
-      - postgres
       - redis
       - rabbitmq

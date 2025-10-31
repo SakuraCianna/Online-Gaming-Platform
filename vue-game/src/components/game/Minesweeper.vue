@@ -765,14 +765,14 @@ const boardStyle = computed(() => {
   padding: 1rem 2.5rem;
   border-radius: 1rem;
   border: none;
-  background: #4a90e2;
+  background: #2874c5;
   color: #fff;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .difficulty-btns button:hover {
-  background: #357abd;
+  background: #1e5f9e;
 }
 
 .back-btn {
@@ -780,14 +780,14 @@ const boardStyle = computed(() => {
   padding: 0.8rem 2rem;
   border-radius: 0.8rem;
   border: none;
-  background: #8f7a66;
+  background: #6d5d52;
   color: #fff;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .back-btn:hover {
-  background: #7f6a56;
+  background: #5d4e42;
 }
 
 .rules-display {
@@ -870,14 +870,14 @@ const boardStyle = computed(() => {
   padding: 1rem 2.5rem;
   border-radius: 1rem;
   border: none;
-  background: #e74c3c;
+  background: #c0392b;
   color: #fff;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .start-btn:hover {
-  background: #c0392b;
+  background: #a93226;
 }
 
 .transition-anim {
@@ -1320,7 +1320,7 @@ const boardStyle = computed(() => {
 }
 
 .cell-mine {
-  background: #e74c3c;
+  background: #c0392b;
   color: #fff;
 }
 
@@ -1351,7 +1351,7 @@ const boardStyle = computed(() => {
 }
 
 .save-btn {
-  background: #8f7a66;
+  background: #6d5d52;
   color: #fff;
   border: none;
   border-radius: 0.5rem;
@@ -1361,7 +1361,7 @@ const boardStyle = computed(() => {
 }
 
 .save-btn:hover {
-  background: #7f6a56;
+  background: #5d4e42;
 }
 
 .game-result {
@@ -1433,12 +1433,12 @@ const boardStyle = computed(() => {
 }
 
 .retry-btn {
-  background: #8f7a66;
+  background: #6d5d52;
   color: #fff;
 }
 
 .retry-btn:hover {
-  background: #7f6a56;
+  background: #5d4e42;
 }
 
 .exit-btn {
@@ -1447,7 +1447,7 @@ const boardStyle = computed(() => {
 }
 
 .exit-btn:hover {
-  background: #e74c3c;
+  background: #c0392b;
   color: #fff;
 }
 
@@ -1495,7 +1495,7 @@ const boardStyle = computed(() => {
   padding: 6px 18px;
   border-radius: 6px;
   border: none;
-  background: #4a90e2;
+  background: #2874c5;
   color: #fff;
   font-size: 1rem;
   cursor: pointer;
@@ -1503,7 +1503,7 @@ const boardStyle = computed(() => {
 }
 
 .custom-dialog-actions button:hover {
-  background: #357abd;
+  background: #1e5f9e;
 }
 
 .game-title {

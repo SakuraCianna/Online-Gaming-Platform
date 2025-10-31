@@ -1,11 +1,13 @@
 package com.game.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 房间玩家表
@@ -49,8 +51,8 @@ public class RoomPlayer {
     /**
      * AI配置参数(JSON格式)
      */
-    @TableField("ai_config")
-    private String aiConfig;
+    @TableField(value = "ai_config", typeHandler = JacksonTypeHandler.class)
+    private Map<String, Object> aiConfig;
 
     /**
      * 队伍ID:0-无队伍,1-队伍A,2-队伍B,依此类推
@@ -76,7 +78,6 @@ public class RoomPlayer {
     @TableField("position")
     private Integer position;
 
-
     /**
      * 击杀数
      */
@@ -98,7 +99,7 @@ public class RoomPlayer {
     /**
      * 加入时间
      */
-    @TableField(value = "join_time", fill = FieldFill.INSERT)
+    @TableField("join_time")
     private LocalDateTime joinTime;
 
     /**

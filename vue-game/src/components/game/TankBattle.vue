@@ -232,29 +232,44 @@ async function startGame() {
         return
     }
 
-    // 跳转到游戏页面，传递游戏配置
-    router.push({
-        path: '/game/tank-battle/play',
-        query: {
-            roomCode: roomInfo.value?.roomCode,
+    try {
+        // 调用后端接口启动游戏
+        const response = await request.post(`/tankbattle/${roomInfo.value?.roomCode}/start`, {
+            userId: user.value?.id,
             mode: selectedMode.value,
             map: selectedMap.value
-        }
-    })
-}
+        })
 
-// ========== 调试功能（后续删除） ==========
-function startDebugGame() {
-    ElMessage.success('启动调试模式')
-    router.push({
-        path: '/game/tank-battle/play',
-        query: {
-            mode: '1v1v1v1',
-            debug: 'true'  // 调试标记
+        if (response.data.success || response.data.code === 200) {
+            ElMessage.success('游戏启动中...')
+            // 订阅游戏开始事件，收到后跳转
+            if (wsService) {
+                wsService.subscribe(`/topic/tankbattle/${roomInfo.value?.roomCode}/gameStart`, (msg) => {
+                    try {
+                        const data = JSON.parse(msg.body)
+                        // 跳转到游戏页面
+                        router.push({
+                            path: '/game/tank-battle/play',
+                            query: {
+                                roomCode: roomInfo.value?.roomCode,
+                                gameId: data.gameId,
+                                mode: selectedMode.value,
+                                map: selectedMap.value
+                            }
+                        })
+                    } catch (e) {
+                        console.error('处理游戏开始消息失败:', e)
+                    }
+                })
+            }
+        } else {
+            ElMessage.error(response.data.message || '启动游戏失败')
         }
-    })
+    } catch (error) {
+        console.error('启动游戏失败:', error)
+        ElMessage.error('启动游戏失败，请重试')
+    }
 }
-// ========== 调试功能结束 ==========
 
 // 返回游戏中心
 function goBack() {
@@ -338,7 +353,7 @@ onBeforeUnmount(() => {
         <!-- 主要内容区 -->
         <div class="lobby-content">
             <!-- 左侧：配置区 -->
-            <aside class="config-panel">
+            <aside class="config-panel" aria-label="游戏配置面板">
                 <div class="panel-card">
                     <div class="card-title">
                         <Icon icon="mdi:cog-outline" width="18" />
@@ -379,7 +394,8 @@ onBeforeUnmount(() => {
                     <div class="friends-list">
                         <div v-for="friend in sortedFriends.slice(0, 4)" :key="friend.id"
                             :class="['friend-card', { offline: !friend.online }]">
-                            <img :src="friend.avatar || '/image/default-avatar.jpg'" class="friend-img" />
+                            <img :src="friend.avatar || '/image/default-avatar.jpg'" :alt="friend.username + '的头像'"
+                                class="friend-img" />
                             <div class="friend-details">
                                 <span class="friend-username">{{ friend.username }}</span>
                                 <span class="friend-state">{{ statusText(friend) }}</span>
@@ -424,7 +440,7 @@ onBeforeUnmount(() => {
 
                         <template v-if="seat.player">
                             <div class="slot-content">
-                                <img :src="seat.player.avatar" class="player-img" />
+                                <img :src="seat.player.avatar" :alt="seat.player.username + '的头像'" class="player-img" />
                                 <div class="player-info">
                                     <span class="player-username">{{ seat.player.username }}</span>
                                     <span class="player-badge" v-if="seat.player.isAI">🤖 AI</span>
@@ -456,17 +472,10 @@ onBeforeUnmount(() => {
                         s.player).length}/${currentModeConfig?.players})`
                         }}</span>
                 </button>
-
-                <!-- ========== 调试按钮（后续删除） ========== -->
-                <button class="btn-debug-game" @click="startDebugGame">
-                    <Icon icon="mdi:bug" width="20" />
-                    <span>🔧 调试模式（单人测试）</span>
-                </button>
-                <!-- ========== 调试按钮结束 ========== -->
             </main>
 
             <!-- 右侧：战斗预览/统计 -->
-            <aside class="stats-panel">
+            <aside class="stats-panel" aria-label="战斗信息面板">
                 <div class="panel-card battle-preview">
                     <div class="card-title">
                         <Icon icon="mdi:trophy-outline" width="18" />
@@ -609,20 +618,21 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 8px;
     padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(60, 60, 80, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 8px;
     color: #fff;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s;
+    backdrop-filter: blur(10px);
 }
 
 .btn-back:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.25);
     transform: translateX(-4px);
-    border-color: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 
 .room-badge {
@@ -644,18 +654,19 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 8px;
     padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(60, 60, 80, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 8px;
     color: #fff;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s;
+    backdrop-filter: blur(10px);
 }
 
 .btn-rules:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.25);
 }
 
 .btn-rules:hover .rules-dropdown {
@@ -818,8 +829,8 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(60, 60, 80, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 8px;
     color: #fff;
     font-size: 13px;
@@ -829,8 +840,8 @@ onBeforeUnmount(() => {
 }
 
 .map-card:hover:not(.disabled) {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .map-card.active {
@@ -846,11 +857,12 @@ onBeforeUnmount(() => {
 .soon-tag {
     margin-left: auto;
     padding: 2px 8px;
-    background: rgba(239, 68, 68, 0.2);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: rgba(220, 38, 38, 0.8);
+    border: 1px solid rgba(239, 68, 68, 0.8);
     border-radius: 10px;
     font-size: 10px;
-    color: #fca5a5;
+    color: #fff;
+    font-weight: 700;
 }
 
 /* 好友面板 */
@@ -873,15 +885,15 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 10px;
     padding: 10px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(60, 60, 80, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 10px;
     transition: all 0.3s;
 }
 
 .friend-card:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .friend-card.offline {
@@ -958,7 +970,7 @@ onBeforeUnmount(() => {
     justify-content: center;
     gap: 8px;
     padding: 30px 10px;
-    color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.7);
     font-size: 12px;
 }
 
@@ -981,6 +993,7 @@ onBeforeUnmount(() => {
     font-size: 24px;
     font-weight: 800;
     background: linear-gradient(135deg, #fff, #a5b4fc);
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -1096,8 +1109,8 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(239, 68, 68, 0.3);
-    border: 1px solid rgba(239, 68, 68, 0.4);
+    background: rgba(220, 38, 38, 0.8);
+    border: 1px solid rgba(239, 68, 68, 0.8);
     border-radius: 6px;
     color: #fff;
     cursor: pointer;
@@ -1117,13 +1130,13 @@ onBeforeUnmount(() => {
     justify-content: center;
     gap: 10px;
     padding: 20px;
-    color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.6);
 }
 
 .btn-add-ai {
     padding: 6px 16px;
-    background: rgba(88, 101, 242, 0.2);
-    border: 1px solid rgba(88, 101, 242, 0.3);
+    background: rgba(88, 101, 242, 0.35);
+    border: 1px solid rgba(88, 101, 242, 0.5);
     border-radius: 8px;
     color: #fff;
     font-size: 12px;
@@ -1133,8 +1146,8 @@ onBeforeUnmount(() => {
 }
 
 .btn-add-ai:hover {
-    background: rgba(88, 101, 242, 0.3);
-    box-shadow: 0 0 15px rgba(88, 101, 242, 0.3);
+    background: rgba(88, 101, 242, 0.5);
+    box-shadow: 0 0 15px rgba(88, 101, 242, 0.5);
 }
 
 /* 开始按钮 */
@@ -1144,7 +1157,7 @@ onBeforeUnmount(() => {
     justify-content: center;
     gap: 10px;
     padding: 16px;
-    background: linear-gradient(135deg, #22c55e, #16a34a);
+    background: linear-gradient(135deg, #15803d, #14532d);
     border: none;
     border-radius: 12px;
     color: #fff;
@@ -1166,36 +1179,6 @@ onBeforeUnmount(() => {
     box-shadow: none;
     opacity: 0.6;
 }
-
-/* ========== 调试按钮样式（后续删除） ========== */
-.btn-debug-game {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 12px;
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    border: 2px dashed #fff;
-    border-radius: 12px;
-    color: #fff;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.3s;
-    box-shadow: 0 4px 20px rgba(249, 115, 22, 0.4);
-    margin-top: 10px;
-}
-
-.btn-debug-game:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 6px 30px rgba(249, 115, 22, 0.6);
-}
-
-.btn-debug-game:active {
-    transform: translateY(0) scale(0.98);
-}
-
-/* ========== 调试按钮样式结束 ========== */
 
 /* ===== 右侧统计面板 ===== */
 .stats-panel {

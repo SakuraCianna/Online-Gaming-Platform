@@ -587,7 +587,7 @@ function getSaveData() {
     moves_count: moveCount.value,
     duration: duration.value,
     status: status,
-    game_data: JSON.stringify(board.value),
+    game_data: JSON.stringify({ board: board.value }),
     score: score.value
   }
 }
@@ -729,12 +729,20 @@ function loadInProgressGame() {
     return
   }
 
+  // 检查 gameData 是否为空
+  if (!data.gameData) {
+    ElMessage.error('存档数据为空，无法恢复')
+    stage.value = 'select'
+    return
+  }
+
   // 先设置恢复标志，防止watch触发
   isRestoringGame.value = true
 
   currentDifficulty.value = diff
 
-  board.value = JSON.parse(data.gameData)
+  const parsedData = JSON.parse(data.gameData)
+  board.value = parsedData.board
   score.value = data.score
   moveCount.value = data.movesCount
   duration.value = data.duration
@@ -847,14 +855,14 @@ const boardStyle = computed(() => {
   padding: 1rem 2.5rem;
   border-radius: 1rem;
   border: none;
-  background: #f2b179;
+  background: #985d30;
   color: #fff;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .difficulty-btns button:hover {
-  background: #bb8f5a;
+  background: #a87840;
 }
 
 .back-btn {
@@ -862,14 +870,14 @@ const boardStyle = computed(() => {
   padding: 0.8rem 2rem;
   border-radius: 0.8rem;
   border: none;
-  background: #8f7a66;
+  background: #6f5a46;
   color: #fff;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .back-btn:hover {
-  background: #7f6a56;
+  background: #5f4a36;
 }
 
 .rules-display {
@@ -905,13 +913,13 @@ const boardStyle = computed(() => {
 
 .rule-label {
   font-weight: bold;
-  color: #776e65;
+  color: #5a5248;
   min-width: 120px;
   margin-right: 1rem;
 }
 
 .rule-value {
-  color: #776e65;
+  color: #5a5248;
   flex: 1;
 }
 
@@ -925,7 +933,7 @@ const boardStyle = computed(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: #f2b179;
+  background: #985d30;
   color: white;
   padding: 0.3rem 0.8rem;
   border-radius: 0.5rem;
@@ -951,14 +959,14 @@ const boardStyle = computed(() => {
   padding: 1rem 2.5rem;
   border-radius: 1rem;
   border: none;
-  background: #f67c5f;
+  background: #b84c2f;
   color: #fff;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .start-btn:hover {
-  background: #e66b4e;
+  background: #983c1f;
 }
 
 .transition-anim {
@@ -1020,41 +1028,41 @@ const boardStyle = computed(() => {
 /* 不同数字的颜色 */
 .transition-anim .tile-1 {
   background: #eee4da;
-  color: #776e65;
+  color: #3a3228;
 }
 
 .transition-anim .tile-2 {
   background: #ede0c8;
-  color: #776e65;
+  color: #3a3228;
 }
 
 .transition-anim .tile-3 {
-  background: #f2b179;
+  background: #985d30;
   color: #fff;
 }
 
 .transition-anim .tile-4 {
-  background: #f59563;
+  background: #984023;
   color: #fff;
 }
 
 .transition-anim .tile-5 {
-  background: #f67c5f;
+  background: #983c1f;
   color: #fff;
 }
 
 .transition-anim .tile-6 {
-  background: #f65e3b;
+  background: #982000;
   color: #fff;
 }
 
 .transition-anim .tile-7 {
-  background: #edcf72;
+  background: #685722;
   color: #fff;
 }
 
 .transition-anim .tile-8 {
-  background: #edc22e;
+  background: #685000;
   color: #fff;
 }
 
@@ -1071,22 +1079,18 @@ const boardStyle = computed(() => {
 .transition-anim .start-text {
   display: block;
   font-size: 5rem;
-  color: #f67c5f;
+  color: #782c0f;
   font-weight: bold;
   letter-spacing: 0.2em;
-  text-shadow: 0 4px 20px rgba(246, 124, 95, 0.3),
-    0 0 40px rgba(246, 124, 95, 0.2);
+  text-shadow: 0 4px 20px rgba(120, 44, 15, 0.3),
+    0 0 40px rgba(120, 44, 15, 0.2);
   transform-style: preserve-3d;
-  background: linear-gradient(135deg, #f67c5f 0%, #f2b179 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .subtitle {
   margin-top: 1rem;
   font-size: 1.5rem;
-  color: #8f7a66;
+  color: #5a5248;
   font-weight: 500;
   letter-spacing: 0.3em;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -1125,7 +1129,7 @@ const boardStyle = computed(() => {
   font-size: clamp(1.2rem, 3vw, 2.5rem);
   font-weight: bold;
   font-family: 'Arial Rounded MT Bold', 'Helvetica Rounded', Arial, sans-serif;
-  color: #776e65;
+  color: #3a3228;
   transition: all 0.15s ease;
 }
 
@@ -1137,7 +1141,7 @@ const boardStyle = computed(() => {
 }
 
 .save-btn {
-  background: #8f7a66;
+  background: #6f5a46;
   color: #fff;
   border: none;
   border-radius: 0.5rem;
@@ -1148,7 +1152,7 @@ const boardStyle = computed(() => {
 }
 
 .save-btn:hover {
-  background: #7f6a56;
+  background: #5f4a36;
 }
 
 .game-result {
@@ -1166,78 +1170,78 @@ const boardStyle = computed(() => {
 
 .result-text {
   font-size: 2rem;
-  color: #f67c5f;
+  color: #b84c2f;
   margin-bottom: 1.5rem;
 }
 
 .cell-2 {
   background: #eee4da;
-  color: #776e65;
+  color: #3a3228;
   font-size: clamp(1.2rem, 3vw, 2.5rem);
 }
 
 .cell-4 {
   background: #ede0c8;
-  color: #776e65;
+  color: #3a3228;
   font-size: clamp(1.2rem, 3vw, 2.5rem);
 }
 
 .cell-8 {
-  background: #f2b179;
+  background: #985d30;
   color: #fff;
   font-size: clamp(1.2rem, 3vw, 2.5rem);
 }
 
 .cell-16 {
-  background: #f59563;
+  background: #984023;
   color: #fff;
   font-size: clamp(1rem, 2.8vw, 2.2rem);
 }
 
 .cell-32 {
-  background: #f67c5f;
+  background: #983c1f;
   color: #fff;
   font-size: clamp(1rem, 2.8vw, 2.2rem);
 }
 
 .cell-64 {
-  background: #f65e3b;
+  background: #982000;
   color: #fff;
   font-size: clamp(1rem, 2.8vw, 2.2rem);
 }
 
 .cell-128 {
-  background: #edcf72;
+  background: #685722;
   color: #fff;
   font-size: clamp(0.9rem, 2.4vw, 1.8rem);
 }
 
 .cell-256 {
-  background: #edcc61;
+  background: #887421;
   color: #fff;
   font-size: clamp(0.9rem, 2.4vw, 1.8rem);
 }
 
 .cell-512 {
-  background: #edc850;
+  background: #887010;
   color: #fff;
   font-size: clamp(0.9rem, 2.4vw, 1.8rem);
 }
 
 .cell-1024 {
-  background: #edc53f;
+  background: #886d00;
   color: #fff;
   font-size: clamp(0.8rem, 2vw, 1.5rem);
 }
 
 .cell-2048 {
-  background: #edc22e;
+  background: #886a00;
   color: #fff;
   font-size: clamp(0.8rem, 2vw, 1.5rem);
 }
 
 .cell-4096 {
-  background: #3c3a32;
+  background: #2c2a22;
   color: #fff;
   font-size: clamp(0.8rem, 2vw, 1.5rem);
 }
@@ -1286,7 +1290,7 @@ const boardStyle = computed(() => {
 
 .result-title {
   font-size: 2.4rem;
-  color: #f67c5f;
+  color: #b84c2f;
   font-weight: bold;
   margin-bottom: 1.2rem;
   letter-spacing: 0.1em;
@@ -1294,7 +1298,7 @@ const boardStyle = computed(() => {
 
 .result-desc {
   font-size: 1.2rem;
-  color: #776e65;
+  color: #3a3228;
   margin-bottom: 2rem;
   text-align: center;
 }
@@ -1315,21 +1319,21 @@ const boardStyle = computed(() => {
 }
 
 .retry-btn {
-  background: #8f7a66;
+  background: #6f5a46;
   color: #fff;
 }
 
 .retry-btn:hover {
-  background: #7f6a56;
+  background: #5f4a36;
 }
 
 .exit-btn {
   background: #e0cda7;
-  color: #8f7a66;
+  color: #3a3228;
 }
 
 .exit-btn:hover {
-  background: #f67c5f;
+  background: #b84c2f;
   color: #fff;
 }
 
@@ -1377,7 +1381,7 @@ const boardStyle = computed(() => {
   padding: 6px 18px;
   border-radius: 6px;
   border: none;
-  background: #f2b179;
+  background: #985d30;
   color: #fff;
   font-size: 1rem;
   cursor: pointer;
@@ -1385,6 +1389,6 @@ const boardStyle = computed(() => {
 }
 
 .custom-dialog-actions button:hover {
-  background: #bb8f5a;
+  background: #784d20;
 }
 </style>

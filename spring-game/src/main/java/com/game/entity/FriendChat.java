@@ -43,7 +43,7 @@ public class FriendChat {
     /**
      * 发送时间
      */
-    @TableField(value = "created_at", fill = FieldFill.INSERT)
+    @TableField("created_at")
     private LocalDateTime createdAt;
 
     /**

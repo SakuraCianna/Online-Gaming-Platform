@@ -12,7 +12,7 @@ public interface GomokuMapper extends BaseMapper<Gomoku> {
 
         // 分页查询用户游戏记录
         @Select("SELECT * FROM gomoku_game WHERE player1_id = #{userId} OR player2_id = #{userId} " +
-                        "ORDER BY create_time DESC LIMIT #{size} OFFSET #{offset}")
+                        "ORDER BY create_time DESC LIMIT #{offset}, #{size}")
         List<Gomoku> selectByUserIdWithPage(@Param("userId") Long userId,
                         @Param("offset") Integer offset,
                         @Param("size") Integer size);

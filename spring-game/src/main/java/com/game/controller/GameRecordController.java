@@ -25,11 +25,11 @@ public class GameRecordController {
     private static final long RECORDS_CACHE_TTL = 5; // 记录缓存5分钟
 
     public GameRecordController(GameRecordService gameRecordService,
-            Game2048Service game2048Service,
-            MinesweeperService minesweeperService,
-            GomokuService gomokuService,
-            TankBattleService tankBattleService,
-            RedisTemplate<String, Object> redisTemplate) {
+                                Game2048Service game2048Service,
+                                MinesweeperService minesweeperService,
+                                GomokuService gomokuService,
+                                TankBattleService tankBattleService,
+                                RedisTemplate<String, Object> redisTemplate) {
         this.gameRecordService = gameRecordService;
         this.game2048Service = game2048Service;
         this.minesweeperService = minesweeperService;
