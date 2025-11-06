@@ -35,11 +35,4 @@ public class Game2048Controller {
         result.put("code", 200);
         return ResponseEntity.ok(result);
     }
-
-    @PostMapping("/update")
-    public ResponseEntity<Map<String, Object>> updateData(@RequestBody Map<String, Object> request) {
-        Map<String, Object> result = game2048Service.updateData(request);
-        result.put("code", 200);
-        return ResponseEntity.ok(result);
-    }
 }

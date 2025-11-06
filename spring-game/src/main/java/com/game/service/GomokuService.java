@@ -134,11 +134,15 @@ public class GomokuService {
 
             // WebSocket通知（非AI游戏）
             if (!isAIGame) {
+                // 判断房主是否是黑棋（player1是黑棋）
+                boolean isOwnerBlack = gameRoom.getCreatorId().equals(player1Id);
+                
                 Map<String, Object> notification = new HashMap<>();
                 notification.put("type", "gameStart");
                 notification.put("roomCode", roomCode);
                 notification.put("player1Id", player1Id);
                 notification.put("player2Id", player2Id);
+                notification.put("isBlackFirst", isOwnerBlack);  // 添加房主颜色信息
                 notification.put("timestamp", System.currentTimeMillis());
 
                 messagingTemplate.convertAndSend("/topic/room/" + roomCode, notification);
@@ -202,9 +206,11 @@ public class GomokuService {
 
             // AI落子验证（id=0表示AI）
             if (playerId == 0 && !Long.valueOf(0L).equals(player2Id)) {
-                // 验证游戏是否是AI对战（player2Id为0表示AI对战）
                 throw new BusinessException(403, "当前不是AI对战模式");
             }
+
+            // 判断是否是AI对战（双方都不是AI才是真人对战）
+            boolean isAIGame = Long.valueOf(0L).equals(player2Id);
 
             // 获取棋谱列表
             List<PointVO> gameData = gomoku.getGameData();
@@ -239,15 +245,18 @@ public class GomokuService {
             // 刷新所有相关 Key 的 TTL（包括游戏数据）
             redisKeyManager.refreshRoomTTL(roomCode, "gomoku");
 
-            // 通过WebSocket广播落子信息给房间内所有玩家
-            Map<String, Object> moveNotification = new HashMap<>();
-            moveNotification.put("type", "move");
-            moveNotification.put("x", point.getX());
-            moveNotification.put("y", point.getY());
-            moveNotification.put("color", point.getColor());
-            moveNotification.put("id", point.getId());
+            // 只在真人对战时通过WebSocket广播
+            if (!isAIGame) {
+                Map<String, Object> moveNotification = new HashMap<>();
+                moveNotification.put("type", "move");
+                moveNotification.put("x", point.getX());
+                moveNotification.put("y", point.getY());
+                moveNotification.put("color", point.getColor());
+                moveNotification.put("id", point.getId());
 
-            messagingTemplate.convertAndSend("/topic/room/" + roomCode, moveNotification);
+                String topic = "/topic/room/" + roomCode;
+                messagingTemplate.convertAndSend(topic, moveNotification);
+            }
 
             result.put("success", true);
             result.put("message", "落子成功");
@@ -600,32 +609,8 @@ public class GomokuService {
                 for (Gomoku record : records) {
                     // 清理敏感数据
                     record.setGameData(null);
-
-                    // 确定当前用户的角色和对手
-                    Long opponentId;
-                    if (userId.equals(record.getPlayer1Id())) {
-                        opponentId = record.getPlayer2Id();
-                    } else {
-                        opponentId = record.getPlayer1Id();
-                    }
-
-                    // 设置对手名称（这里需要查询user表，简化处理，可以在前端查询或后续优化）
-                    // 暂时使用ID标识
-
-                    // 确定游戏状态：win/lose/draw
-                    String status;
-                    if (record.getIsDraw() == 1) {
-                        status = "draw";
-                    } else if (userId.equals(record.getWinnerId())) {
-                        status = "win";
-                    } else if (userId.equals(record.getLoserId())) {
-                        status = "lose";
-                    } else {
-                        status = "unknown";
-                    }
-
-                    // 将状态信息存入额外字段（注意：需要确保Entity有这些字段或使用Map）
-                    // 这里我们返回原始数据，让前端根据winnerId判断
+                    
+                    // 返回原始数据，让前端根据winnerId和userId判断游戏结果
                 }
             }
 

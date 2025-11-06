@@ -1,8 +1,7 @@
 package com.game.listener;
 
 import com.game.service.UserStateService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
@@ -12,10 +11,9 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.Objects;
 
+@Slf4j
 @Component
 public class WebSocketEventListener {
-
-    private static final Logger log = LoggerFactory.getLogger(WebSocketEventListener.class);
 
     private final StringRedisTemplate redisTemplate;
     private final UserStateService userStateService;

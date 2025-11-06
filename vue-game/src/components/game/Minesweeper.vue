@@ -563,12 +563,8 @@ function getSaveData() {
 async function autoSaveGame() {
   const data = getSaveData()
   try {
-    if (inProgressGame.value && inProgressGame.value.id) {
-      data.id = inProgressGame.value.id
-      await request.post('/minesweeper/update', data)
-    } else {
-      await request.post('/minesweeper/save', data)
-    }
+    // 后端会根据userId和status自动判断是创建还是更新，前端不需要关心
+    await request.post('/minesweeper/save', data)
   } catch (e) {
     console.log("自动保存失败: " + e)
   }
@@ -579,15 +575,10 @@ async function saveAndExit() {
   stopTimer()
   const data = getSaveData()
   try {
-    let response
-    if (inProgressGame.value && inProgressGame.value.id) {
-      data.id = inProgressGame.value.id
-      response = await request.post('/minesweeper/update', data)
-    } else {
-      response = await request.post('/minesweeper/save', data)
-    }
+    // 后端会根据userId和status自动判断是创建还是更新，前端不需要关心
+    const response = await request.post('/minesweeper/save', data)
 
-    if (response.data.code === 200) {
+    if (response.data.code === 200 || response.data.success) {
       ElMessage.success(response.data.message || '游戏已保存！')
       router.push('/user')
     } else {

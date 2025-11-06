@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @EnableRabbit
 public class RabbitMQConfig {
-
     // 队列和交换机常量
     // 邮件相关
     public static final String EMAIL_QUEUE = "game.email.queue";
@@ -30,7 +29,7 @@ public class RabbitMQConfig {
 
     /**
      * 配置消息转换器（使用JSON格式）
-     * 必须配置，用于自动序列化/反序列化Java对象
+     * 用于自动序列化/反序列化Java对象
      */
     @Bean
     public MessageConverter messageConverter() {

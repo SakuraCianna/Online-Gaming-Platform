@@ -58,6 +58,36 @@ function subscribeGlobalTopics() {
   })
 }
 
+// 用于防止重复提示的标志
+let isWebSocketTokenExpiredMessageShown = false
+
+// 处理Token过期
+function handleTokenExpired(source = 'WebSocket') {
+  if (isWebSocketTokenExpiredMessageShown) return
+  
+  console.error(`[${source}] Token过期，跳转登录页`)
+  isWebSocketTokenExpiredMessageShown = true
+  
+  ElMessage.error({
+    message: '登录已过期，请重新登录',
+    duration: 3000,
+    onClose: () => {
+      isWebSocketTokenExpiredMessageShown = false
+    }
+  })
+  
+  // 清除token和状态
+  localStorage.removeItem('token')
+  wsService.disconnect()
+  userStore.stopPresence()
+  userStore.markOffline()
+  
+  // 跳转登录页
+  setTimeout(() => {
+    router.push('/')
+  }, 1000)
+}
+
 // 监听登录状态变化，动态建立/断开 WebSocket 连接
 watch(isAuthenticated, (authed) => {
   if (authed) {
@@ -66,35 +96,38 @@ watch(isAuthenticated, (authed) => {
 
     // 建立 WebSocket 连接
     const token = userStore.token
-    if (!token) return
+    if (!token) {
+      console.error('[App] Token不存在，无法建立WebSocket连接')
+      return
+    }
 
+    console.log('[App] 建立WebSocket连接')
     wsService.connect(token, {
       onConnect: () => {
+        console.log('[App] WebSocket连接成功')
         // 订阅全局主题
         subscribeGlobalTopics()
       },
       onStompError: (frame) => {
+        console.error('[App] WebSocket STOMP错误:', frame)
         // 检查是否是 token 过期
         if (frame.headers && frame.headers.message) {
           const message = frame.headers.message
           if (message.includes('JWT') || message.includes('Token') || message.includes('expired')) {
-            ElMessage.error({
-              message: '登录已过期，请重新登录',
-              duration: 5000
-            })
-            // 3秒后自动跳转到登录页
-            setTimeout(() => {
-              userStore.logout()
-              router.push('/login')
-            }, 3000)
+            handleTokenExpired('WebSocket-STOMP')
           }
         }
       },
       onWebSocketError: (error) => {
+        console.error('[App] WebSocket底层错误:', error)
         // WebSocket底层错误，静默处理
+      },
+      onDisconnect: () => {
+        console.log('[App] WebSocket已断开')
       }
     })
   } else {
+    console.log('[App] 用户未登录，断开WebSocket')
     // 断开 WebSocket 连接
     wsService.disconnect()
     userStore.stopPresence()

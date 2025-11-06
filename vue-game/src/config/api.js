@@ -1,4 +1,6 @@
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
+import router from '../config/router'
 
 // 开发环境使用相对路径，让 Vite 代理处理
 const RAW_BASE = ''
@@ -17,6 +19,9 @@ const aiRequest = axios.create({
   timeout: 60000
 })
 
+// 用于防止重复提示的标志
+let isTokenExpiredMessageShown = false
+
 const addInterceptors = (instance) => {
   instance.interceptors.request.use(config => {
     const token = localStorage.getItem('token')
@@ -28,7 +33,35 @@ const addInterceptors = (instance) => {
 
   instance.interceptors.response.use(
     response => response,
-    error => Promise.reject(error instanceof Error ? error : new Error(String(error)))
+    error => {
+      // Token过期或未授权（401）
+      if (error.response?.status === 401) {
+        console.error('[API] Token过期或未授权，跳转登录页')
+
+        // 防止重复提示
+        if (!isTokenExpiredMessageShown) {
+          isTokenExpiredMessageShown = true
+
+          ElMessage.error({
+            message: '登录已过期，请重新登录',
+            duration: 3000,
+            onClose: () => {
+              isTokenExpiredMessageShown = false
+            }
+          })
+
+          // 清除token和用户信息
+          localStorage.removeItem('token')
+
+          // 延迟跳转到登录页
+          setTimeout(() => {
+            router.push('/')
+          }, 1000)
+        }
+      }
+
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)))
+    }
   )
 }
 

@@ -1,7 +1,7 @@
 package com.game.service;
 
-import com.game.component.JwtUtils;
-import com.game.component.PasswordUtils;
+import com.game.component.JwtUtil;
+import com.game.component.PasswordUtil;
 import com.game.entity.User;
 import com.game.exception.BusinessException;
 import com.game.mapper.UserMapper;
@@ -67,7 +67,7 @@ public class UserService {
         }
 
         // 注册逻辑
-        String encodedPassword = PasswordUtils.encrypt(password);
+        String encodedPassword = PasswordUtil.encrypt(password);
         Map<String, Object> updateMap = new HashMap<>();
         updateMap.put("username", username);
         updateMap.put("password", encodedPassword);
@@ -114,7 +114,7 @@ public class UserService {
             throw new BusinessException(400, "账户未完成注册");
         }
 
-        if (!PasswordUtils.matches(password, user.getPassword())) {
+        if (!PasswordUtil.matches(password, user.getPassword())) {
             throw new BusinessException(400, "密码错误");
         }
 
@@ -126,7 +126,7 @@ public class UserService {
         user.setVerificationCode(null);
 
         // 生成JWT token
-        String token = JwtUtils.generateToken(String.valueOf(user.getId()));
+        String token = JwtUtil.generateToken(String.valueOf(user.getId()));
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
@@ -171,7 +171,7 @@ public class UserService {
             throw new BusinessException(400, "验证码错误");
         }
 
-        if (userMapper.updatePassword(email, PasswordUtils.encrypt(password)) > 0) {
+        if (userMapper.updatePassword(email, PasswordUtil.encrypt(password)) > 0) {
             response.put("success", true);
             response.put("message", "更新密码成功");
             response.put("user", user);
@@ -218,20 +218,11 @@ public class UserService {
         }
 
         // 根据难度设定倍率
-        double difficultyMultiplier;
-        switch (difficulty.toLowerCase()) {
-            case "easy":
-                difficultyMultiplier = 1.0;
-                break;
-            case "normal":
-                difficultyMultiplier = 1.5;
-                break;
-            case "hard":
-                difficultyMultiplier = 2.0;
-                break;
-            default:
-                difficultyMultiplier = 1.0;
-        }
+        double difficultyMultiplier = switch (difficulty.toLowerCase()) {
+            case "normal" -> 1.5;
+            case "hard" -> 2.0;
+            default -> 1.0;
+        };
 
         // 计算最终积分（只保留整数部分）
         int finalScore = (int) Math.floor(baseScore * difficultyMultiplier);

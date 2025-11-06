@@ -1,11 +1,10 @@
 package com.game.Interceptor;
 
-import com.game.component.JwtUtils;
+import com.game.component.JwtUtil;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
 import jakarta.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
@@ -15,9 +14,8 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 
 import java.util.Map;
 
+@Slf4j
 public class JwtHandshakeInterceptor implements HandshakeInterceptor {
-
-    private static final Logger log = LoggerFactory.getLogger(JwtHandshakeInterceptor.class);
 
     @Override
     public boolean beforeHandshake(@NonNull ServerHttpRequest request,
@@ -39,7 +37,7 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
         // 尝试解析token
         try {
-            Long userId = JwtUtils.getUserIdFromToken(token);
+            Long userId = JwtUtil.getUserIdFromToken(token);
 
             // 检查userId是否有效
             if (userId <= 0) {

@@ -65,15 +65,17 @@ class WebSocketService {
                 // 如果已有订阅，先取消
                 const existingSub = this.subscriptions.get(topic)
                 if (existingSub) {
+                    console.log('[WebSocketService] 取消旧订阅:', topic)
                     existingSub.unsubscribe()
                 }
 
                 const subscription = this.client.subscribe(topic, handler)
                 this.subscriptions.set(topic, subscription)
             } catch (error) {
-                console.error(error)
-                // 订阅失败
+                console.error('[WebSocketService] 订阅失败:', topic, error)
             }
+        } else {
+            console.warn('[WebSocketService] WebSocket未连接，订阅将在连接后执行:', topic)
         }
     }
 
@@ -87,7 +89,6 @@ class WebSocketService {
             subscription.unsubscribe()
             this.subscriptions.delete(topic)
         }
-
         this.handlers.delete(topic)
     }
 
@@ -98,6 +99,7 @@ class WebSocketService {
      */
     send(destination, body) {
         if (!this.client?.connected) {
+            console.error('[WebSocketService] 发送消息失败: WebSocket未连接', destination)
             return false
         }
 
@@ -108,7 +110,7 @@ class WebSocketService {
             })
             return true
         } catch (error) {
-            console.error(error)
+            console.error('[WebSocketService] 发送消息异常:', destination, error)
             return false
         }
     }
@@ -124,8 +126,7 @@ class WebSocketService {
                 const subscription = this.client.subscribe(topic, handler)
                 this.subscriptions.set(topic, subscription)
             } catch (error) {
-                console.error(error)
-                // 重新订阅失败
+                console.error('[WebSocketService] 重新订阅失败:', topic, error)
             }
         }
     }

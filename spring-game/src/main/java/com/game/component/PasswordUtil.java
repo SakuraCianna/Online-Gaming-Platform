@@ -2,7 +2,7 @@ package com.game.component;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
-public class PasswordUtils {
+public class PasswordUtil {
     // 创建 BCrypt 加密器
     private static final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 

@@ -4,8 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.game.exception.BusinessException;
 import com.game.mapper.FriendMapper;
 import com.game.vo.FriendVO;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -16,11 +15,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 @Transactional
 public class FriendService {
-
-    private static final Logger log = LoggerFactory.getLogger(FriendService.class);
 
     private final FriendMapper friendMapper;
     // 使用 StringRedisTemplate：读取用户状态,与 UserStateService 保持一致

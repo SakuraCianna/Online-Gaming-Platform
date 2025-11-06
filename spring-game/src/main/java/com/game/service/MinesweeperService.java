@@ -1,9 +1,11 @@
 package com.game.service;
 
+import com.game.config.RabbitMQConfig;
+import com.game.dto.GameRecordMessageDTO;
 import com.game.exception.BusinessException;
 import com.game.mapper.MinesweeperMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.game.entity.Minesweeper;
@@ -12,23 +14,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 @Transactional
 public class MinesweeperService {
 
-    private static final Logger log = LoggerFactory.getLogger(MinesweeperService.class);
-
     private final MinesweeperMapper minesweeperMapper;
-    private final GameRecordService gameRecordService;
+    private final RabbitTemplate rabbitTemplate;
 
-    public MinesweeperService(MinesweeperMapper minesweeperMapper, GameRecordService gameRecordService) {
+    public MinesweeperService(MinesweeperMapper minesweeperMapper, RabbitTemplate rabbitTemplate) {
         this.minesweeperMapper = minesweeperMapper;
-        this.gameRecordService = gameRecordService;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     public Map<String, Object> saveData(Map<String, Object> request) {
         log.info("开始保存扫雷游戏数据: userId={}", request.get("user_id"));
-        Map<String, Object> result = new HashMap<>();
 
         // 参数提取和校验
         if (request.get("user_id") == null) {
@@ -52,51 +52,29 @@ public class MinesweeperService {
             throw new BusinessException(400, "游戏数据不能为空");
         }
 
+        Map<String, Object> result = new HashMap<>();
+
         try {
-            // 如果是保存进行中的游戏(status=0)，先检查是否已有进行中的记录
-            if (status == 0) {
-                Minesweeper inProgress = minesweeperMapper.selectInProgressByUserId(userId);
-                if (inProgress != null) {
-                    // 如果已有进行中的游戏，更新而不是插入
-                    log.info("检测到用户已有进行中的游戏，将更新该记录: userId={}, existingId={}", userId, inProgress.getId());
-                    Map<String, Object> updateRequest = new HashMap<>(request);
-                    updateRequest.put("id", inProgress.getId());
-                    return updateData(updateRequest);
-                }
-            }
+            // 构建消息并发送到RabbitMQ队列
+            GameRecordMessageDTO message = GameRecordMessageDTO.buildMinesweeper(
+                    userId, difficulty, boardWidth, boardHeight,
+                    mineCount, correctFlags, duration, status, gameData
+            );
 
-            // 组装插入数据
-            Map<String, Object> insert = new HashMap<>();
-            insert.put("user_id", userId);
-            insert.put("difficulty", difficulty);
-            insert.put("board_width", boardWidth);
-            insert.put("board_height", boardHeight);
-            insert.put("mine_count", mineCount);
-            insert.put("correct_flags", correctFlags);
-            insert.put("duration", duration);
-            insert.put("status", status);
-            insert.put("game_data", gameData);
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.GAME_RECORD_EXCHANGE,
+                    RabbitMQConfig.GAME_RECORD_ROUTING_KEY,
+                    message
+            );
 
-            if (minesweeperMapper.insertMinesweeperRecord(insert) == 1) {
-                result.put("success", true);
-                result.put("message", "游戏保存成功");
-
-                // 如果游戏已结束（胜利或失败），失效缓存
-                if (status == 1 || status == 2) {
-                    gameRecordService.invalidateCache(userId, "minesweeper");
-                }
-                log.info("扫雷游戏保存成功: userId={}, status={}", userId, status);
-            } else {
-                result.put("success", false);
-                result.put("message", "游戏保存失败");
-                log.warn("扫雷游戏保存失败(数据库返回0): userId={}", userId);
-            }
-        } catch (BusinessException e) {
-            throw e;
+            result.put("success", true);
+            result.put("message", "游戏保存请求已提交");
+            log.info("扫雷游戏保存消息已发送到RabbitMQ: userId={}, status={}", userId, status);
         } catch (Exception e) {
-            log.error("保存扫雷游戏数据失败: userId={}, 错误信息: {}", userId, e.getMessage(), e);
+            log.error("发送扫雷游戏保存消息失败: userId={}, 错误: {}", userId, e.getMessage(), e);
             throw new BusinessException(500, "保存游戏数据失败: " + e.getMessage());
         }
+
         return result;
     }
 
@@ -134,82 +112,6 @@ public class MinesweeperService {
         return result;
     }
 
-    public Map<String, Object> updateData(Map<String, Object> request) {
-        log.info("开始更新扫雷游戏数据: id={}", request.get("id"));
-        Map<String, Object> result = new HashMap<>();
-
-        // 参数校验
-        if (request.get("id") == null) {
-            throw new BusinessException(400, "记录ID不能为空");
-        }
-        if (request.get("user_id") == null) {
-            throw new BusinessException(400, "用户ID不能为空");
-        }
-
-        Long id = ((Number) request.get("id")).longValue();
-        Long userId = ((Number) request.get("user_id")).longValue();
-        String difficulty = (String) request.get("difficulty");
-        Integer boardWidth = ((Number) request.get("board_width")).intValue();
-        Integer boardHeight = ((Number) request.get("board_height")).intValue();
-        Integer mineCount = ((Number) request.get("mine_count")).intValue();
-        Integer correctFlags = ((Number) request.get("correct_flags")).intValue();
-        Integer duration = ((Number) request.get("duration")).intValue();
-        Integer status = ((Number) request.get("status")).intValue();
-        String gameData = (String) request.get("game_data");
-
-        // 参数校验
-        if (difficulty == null || difficulty.trim().isEmpty()) {
-            throw new BusinessException(400, "难度不能为空");
-        }
-        if (gameData == null || gameData.trim().isEmpty()) {
-            throw new BusinessException(400, "游戏数据不能为空");
-        }
-
-        try {
-            // 先查询记录是否存在
-            Minesweeper existing = minesweeperMapper.selectById(id);
-            if (existing == null) {
-                throw new BusinessException(404, "游戏记录不存在");
-            }
-
-            // 验证是否是该用户的记录
-            if (!existing.getUserId().equals(userId)) {
-                throw new BusinessException(403, "无权限更新该游戏记录");
-            }
-
-            Map<String, Object> update = new HashMap<>();
-            update.put("id", id);
-            update.put("difficulty", difficulty);
-            update.put("board_width", boardWidth);
-            update.put("board_height", boardHeight);
-            update.put("mine_count", mineCount);
-            update.put("correct_flags", correctFlags);
-            update.put("duration", duration);
-            update.put("status", status);
-            update.put("game_data", gameData);
-
-            if (minesweeperMapper.updateMinesweeperRecord(update) == 1) {
-                result.put("success", true);
-                result.put("message", "游戏更新成功");
-
-                // 如果游戏状态变为结束（胜利或失败），失效缓存
-                if ((status == 1 || status == 2) && existing.getStatus() == 0) {
-                    gameRecordService.invalidateCache(userId, "minesweeper");
-                }
-                log.info("扫雷游戏更新成功: id={}, status={}", id, status);
-            } else {
-                result.put("success", false);
-                result.put("message", "游戏更新失败");
-                log.warn("扫雷游戏更新失败(数据库返回0): id={}", id);
-            }
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("更新扫雷游戏数据失败: id={}, 错误信息: {}", id, e.getMessage(), e);
-            throw new BusinessException(500, "更新游戏数据失败: " + e.getMessage());
-        }
-        return result;
-    }
 
     /**
      * 获取用户进行中的游戏

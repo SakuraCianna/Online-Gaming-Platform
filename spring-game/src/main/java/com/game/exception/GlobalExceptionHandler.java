@@ -1,8 +1,7 @@
 package com.game.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -11,10 +10,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @ControllerAdvice
 public class GlobalExceptionHandler {
-
-    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
      * 处理业务异常
@@ -22,7 +20,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Map<String, Object>> handleBusinessException(BusinessException e, HttpServletRequest request) {
         // 记录业务异常日志
-        logger.warn("业务异常 [{}] {} - 状态码: {}, 错误信息: {}",
+        log.warn("业务异常 [{}] {} - 状态码: {}, 错误信息: {}",
                 request.getMethod(),
                 request.getRequestURI(),
                 e.getCode(),
@@ -42,22 +40,22 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(StackOverflowError.class)
     public ResponseEntity<Map<String, Object>> handleStackOverflowError(StackOverflowError e, HttpServletRequest request) {
-        logger.error("⚠️ StackOverflowError发生 [{}] {} - 请检查实体类的循环引用问题",
+        log.error("⚠️ StackOverflowError发生 [{}] {} - 请检查实体类的循环引用问题",
                 request.getMethod(),
                 request.getRequestURI());
 
         // 打印部分堆栈（前20行，避免日志过大）
         StackTraceElement[] stackTrace = e.getStackTrace();
         if (stackTrace != null && stackTrace.length > 0) {
-            logger.error("堆栈信息（前20行）:");
+            log.error("堆栈信息（前20行）:");
             for (int i = 0; i < Math.min(20, stackTrace.length); i++) {
-                logger.error("  at {}", stackTrace[i].toString());
+                log.error("  at {}", stackTrace[i].toString());
             }
         }
 
         // 打印请求信息
-        logger.error("请求参数: {}", request.getQueryString());
-        logger.error("请求IP: {}", request.getRemoteAddr());
+        log.error("请求参数: {}", request.getQueryString());
+        log.error("请求IP: {}", request.getRemoteAddr());
 
         Map<String, Object> result = new HashMap<>();
         result.put("success", false);
@@ -72,11 +70,11 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NullPointerException.class)
     public ResponseEntity<Map<String, Object>> handleNullPointerException(NullPointerException e, HttpServletRequest request) {
-        logger.error("空指针异常 [{}] {} - 错误信息: {}",
+        log.error("空指针异常 [{}] {} - 错误信息: {}",
                 request.getMethod(),
                 request.getRequestURI(),
                 e.getMessage());
-        logger.error("堆栈信息:", e);
+        log.error("堆栈信息:", e);
 
         Map<String, Object> result = new HashMap<>();
         result.put("success", false);
@@ -91,7 +89,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException e, HttpServletRequest request) {
-        logger.warn("参数异常 [{}] {} - 错误信息: {}",
+        log.warn("参数异常 [{}] {} - 错误信息: {}",
                 request.getMethod(),
                 request.getRequestURI(),
                 e.getMessage());
@@ -109,12 +107,12 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleException(Exception e, HttpServletRequest request) {
-        logger.error("系统异常 [{}] {} - 错误类型: {}, 错误信息: {}",
+        log.error("系统异常 [{}] {} - 错误类型: {}, 错误信息: {}",
                 request.getMethod(),
                 request.getRequestURI(),
                 e.getClass().getSimpleName(),
                 e.getMessage());
-        logger.error("详细堆栈信息:", e);
+        log.error("详细堆栈信息:", e);
 
         Map<String, Object> result = new HashMap<>();
         result.put("success", false);

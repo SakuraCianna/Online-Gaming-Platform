@@ -12,12 +12,12 @@ import java.security.Key;
 import java.util.Date;
 
 @Component
-public class JwtUtils {
+public class JwtUtil {
     private static String SECRET_KEY;
 
     @Value("${jwt.secret}")
     public void setSecretKey(String secretKey) {
-        JwtUtils.SECRET_KEY = secretKey;
+        JwtUtil.SECRET_KEY = secretKey;
     }
 
     // 生成 Token

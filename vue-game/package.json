@@ -20,6 +20,7 @@
     "element-plus": "^2.10.5",
     "gsap": "^3.13.0",
     "internal-ip": "^8.0.1",
+    "jwt-decode": "^4.0.0",
     "konva": "^10.0.8",
     "lodash-es": "^4.17.21",
     "matter-js": "^0.20.0",

@@ -35,11 +35,4 @@ public class MinesweeperController {
         result.put("code", 200);
         return ResponseEntity.ok(result);
     }
-
-    @PostMapping("/update")
-    public ResponseEntity<Map<String, Object>> updateData(@RequestBody Map<String, Object> request) {
-        Map<String, Object> result = minesweeperService.updateData(request);
-        result.put("code", 200);
-        return ResponseEntity.ok(result);
-    }
 }

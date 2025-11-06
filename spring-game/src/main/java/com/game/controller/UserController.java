@@ -1,7 +1,7 @@
 package com.game.controller;
 
 import com.game.component.HCaptchaUtil;
-import com.game.component.JwtUtils;
+import com.game.component.JwtUtil;
 import com.game.mapper.FriendMapper;
 import com.game.mapper.UserMapper;
 import com.game.service.UserService;
@@ -76,7 +76,7 @@ public class UserController {
         }
         String token = authHeader.substring(7);
         try {
-            Claims claims = JwtUtils.verifyToken(token);
+            Claims claims = JwtUtil.verifyToken(token);
             return ResponseEntity.ok("Token is valid for user: " + claims.getSubject());
         } catch (Exception e) {
             return ResponseEntity.status(401).body("token无效或已过期");

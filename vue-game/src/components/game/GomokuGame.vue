@@ -1229,7 +1229,6 @@ function createMessageHandler() {
           handleGameEndNotification(data)
           break
         default:
-          // 未知消息类型，忽略
           break
       }
     } catch (error) {
@@ -1367,7 +1366,9 @@ async function recoverGameData() {
 
 // 等待WebSocket连接并订阅
 async function ensureWebSocketReady() {
-  if (isAIGame.value) return true
+  if (isAIGame.value) {
+    return true
+  }
 
   if (!(await waitForConnection())) {
     ElMessage.error('网络连接失败，请刷新页面重试')
@@ -1380,10 +1381,15 @@ async function ensureWebSocketReady() {
 
   const topic = `/topic/room/${roomInfo.value.roomCode}`
 
-  // 检查是否已经订阅，避免重复订阅
-  if (!wsService.isSubscribed(topic)) {
-    wsService.subscribe(topic, createMessageHandler())
-  }
+  // 先取消旧的订阅（如果存在）
+  wsService.unsubscribe(topic)
+
+  // 等待一小段时间确保取消完成
+  await new Promise(resolve => setTimeout(resolve, 100))
+
+  // 强制重新订阅游戏界面的handler，覆盖等待界面的handler
+  // 这样可以确保游戏界面的消息处理器（createMessageHandler）被正确注册
+  wsService.subscribe(topic, createMessageHandler())
 
   if (await waitForSubscription(topic)) {
     // 订阅成功后，尝试恢复游戏数据（处理断线重连情况）
@@ -1419,7 +1425,8 @@ async function initializeGame() {
 
   if (gameConfig.myColor) {
     myColor.value = gameConfig.myColor
-    currentTurn.value = gameConfig.isBlackFirst ? COLOR_BLACK : COLOR_WHITE
+    // 五子棋规则：黑棋永远先手
+    currentTurn.value = COLOR_BLACK
   }
 
   // 同时执行入场动画和WebSocket连接检查
@@ -1963,15 +1970,43 @@ onBeforeUnmount(() => {
 .stone.black {
   background: #1a1a1a;
   /* 后备纯色背景，确保在渐变失败时也能显示 */
-  background: radial-gradient(circle at 35% 35%, #555, #000);
+  background: radial-gradient(circle at 30% 30%, #666, #1a1a1a 50%, #000);
   border: 1px solid #000;
+  /* 增强黑子的立体感 */
+  position: relative;
+}
+
+.stone.black::before {
+  content: '';
+  position: absolute;
+  top: 15%;
+  left: 20%;
+  width: 35%;
+  height: 35%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.25), transparent);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .stone.white {
   background: #f5f5f5;
   /* 后备纯色背景，确保在渐变失败时也能显示 */
-  background: radial-gradient(circle at 35% 35%, #fff, #ddd);
-  border: 1px solid #ccc;
+  background: radial-gradient(circle at 30% 30%, #fff, #e8e8e8 50%, #d5d5d5);
+  border: 1px solid #bbb;
+  /* 增强白子的立体感 */
+  position: relative;
+}
+
+.stone.white::before {
+  content: '';
+  position: absolute;
+  top: 15%;
+  left: 20%;
+  width: 40%;
+  height: 40%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.9), transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 /* 最后一步标记 */
