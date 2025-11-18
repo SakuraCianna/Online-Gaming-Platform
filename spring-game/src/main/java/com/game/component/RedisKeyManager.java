@@ -24,8 +24,8 @@ public class RedisKeyManager {
      * @param roomCode 房间号
      */
     public void refreshRoomTTL(String roomCode) {
-        String roomKey = "room:code:" + roomCode;
-        String playerKey = "room:players:" + roomCode;
+        String roomKey = buildRoomKey(roomCode);
+        String playerKey = buildPlayerKey(roomCode);
 
         if (redisTemplate.hasKey(roomKey)) {
             redisTemplate.expire(roomKey, ROOM_TTL_HOURS, TimeUnit.HOURS);
@@ -41,7 +41,7 @@ public class RedisKeyManager {
      * 用于游戏进行中的场景，需要同时刷新所有相关数据
      * 
      * @param roomCode 房间号
-     * @param gameName 游戏名称
+     * @param gameName 游戏名称（如：gomoku, tank_battle, 2048, minesweeper）
      */
     public void refreshRoomTTL(String roomCode, String gameName) {
         // 先刷新房间和玩家信息
@@ -49,7 +49,7 @@ public class RedisKeyManager {
 
         // 再刷新游戏数据
         if (gameName != null && !gameName.trim().isEmpty()) {
-            String gameKey = gameName + ":" + roomCode;
+            String gameKey = buildGameKey(roomCode, gameName);
             if (redisTemplate.hasKey(gameKey)) {
                 redisTemplate.expire(gameKey, GAME_TTL_HOURS, TimeUnit.HOURS);
             }
@@ -62,7 +62,7 @@ public class RedisKeyManager {
      * @param roomCode 房间号
      */
     public void setRoomInitialTTL(String roomCode) {
-        redisTemplate.expire("room:code:" + roomCode, ROOM_TTL_HOURS, TimeUnit.HOURS);
+        redisTemplate.expire(buildRoomKey(roomCode), ROOM_TTL_HOURS, TimeUnit.HOURS);
     }
 
     /**
@@ -71,18 +71,18 @@ public class RedisKeyManager {
      * @param roomCode 房间号
      */
     public void setPlayerInitialTTL(String roomCode) {
-        redisTemplate.expire("room:players:" + roomCode, PLAYER_TTL_HOURS, TimeUnit.HOURS);
+        redisTemplate.expire(buildPlayerKey(roomCode), PLAYER_TTL_HOURS, TimeUnit.HOURS);
     }
 
     /**
      * 设置游戏信息初始 TTL
      * 
      * @param roomCode 房间号
-     * @param gameName 游戏名称（如：gomoku, tank-battle, 2048, minesweeper）
+     * @param gameName 游戏名称（如：gomoku, tank_battle, 2048, minesweeper）
      */
     public void setGameInitialTTL(String roomCode, String gameName) {
         if (gameName != null && !gameName.trim().isEmpty()) {
-            redisTemplate.expire(gameName + ":" + roomCode, GAME_TTL_HOURS, TimeUnit.HOURS);
+            redisTemplate.expire(buildGameKey(roomCode, gameName), GAME_TTL_HOURS, TimeUnit.HOURS);
         }
     }
 
@@ -115,5 +115,15 @@ public class RedisKeyManager {
      */
     public String buildPlayerKey(String roomCode) {
         return "room:players:" + roomCode;
+    }
+
+    /**
+     * 构建用户状态的 Redis Key
+     * 
+     * @param userId 用户ID
+     * @return Redis Key 字符串
+     */
+    public String buildUserStateKey(long userId) {
+        return "user:state:" + userId;
     }
 }

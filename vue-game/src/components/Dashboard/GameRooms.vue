@@ -34,7 +34,7 @@ const statistics = ref({
 const gameTypes = [
     { value: 'all', label: '全部游戏', icon: '🎮' },
     { value: 'gomoku', label: '五子棋', icon: '⭕️', color: '#667eea' },
-    { value: 'tank-battle', label: '坦克大战', icon: '🚗', color: '#f093fb' },
+    { value: 'tank_battle', label: '坦克大战', icon: '🚗', color: '#f093fb' },
     { value: 'minesweeper', label: '扫雷', icon: '💣', color: '#4facfe' },
     { value: '2048', label: '2048', icon: '🎯', color: '#fa709a' }
 ]
@@ -134,7 +134,7 @@ const fetchRooms = async () => {
 
 // 生成模拟数据
 const generateMockRooms = () => {
-    const mockGames = ['gomoku', 'tank-battle', 'minesweeper', '2048']
+    const mockGames = ['gomoku', 'tank_battle', 'minesweeper', '2048']
     const mockNames = ['小明', '小红', '小刚', '小李', '小王', '小张', '小赵', '小钱']
     const mockRooms = []
 

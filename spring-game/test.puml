@@ -1,0 +1,51 @@
+@startuml
+title 酒店下单及支付系统协作图
+
+actor 客户
+participant "前端应用" as Frontend
+participant "API网关" as Gateway
+participant "订单服务" as OrderService
+participant "房态服务" as RoomService
+participant "支付服务" as PaymentService
+participant "通知服务" as NotificationService
+database "数据库集群" as DB
+queue "消息队列" as MQ
+
+== 下单流程 ==
+
+客户 -> Frontend : 1: 选择酒店房型\n填写入住信息
+Frontend -> Gateway : 2: 提交订单请求
+Gateway -> RoomService : 3: 验证并锁定库存
+RoomService -> DB : 4: 执行库存锁定
+RoomService --> Gateway : 5: 返回锁定结果
+
+Gateway -> OrderService : 6: 生成订单
+OrderService -> DB : 7: 创建订单记录
+OrderService --> Gateway : 8: 返回订单详情
+Gateway --> Frontend : 9: 显示订单页面
+Frontend --> 客户 : 10: 显示支付页面
+
+== 支付流程 ==
+
+客户 -> Frontend : 11: 选择支付方式\n确认支付
+Frontend -> Gateway : 12: 提交支付请求
+Gateway -> PaymentService : 13: 生成支付请求
+PaymentService -> DB : 14: 记录支付流水
+PaymentService --> Gateway : 15: 返回支付参数
+Gateway --> Frontend : 16: 返回支付页面
+Frontend --> 客户 : 17: 跳转支付页面
+
+客户 -> PaymentService : 18: 完成支付验证
+PaymentService -> OrderService : 19: 更新订单状态
+OrderService -> DB : 20: 更新订单为已支付
+OrderService -> RoomService : 21: 确认库存占用
+RoomService -> DB : 22: 更新房态状态
+
+OrderService -> NotificationService : 23: 发送通知请求
+NotificationService -> MQ : 24: 异步发送消息
+NotificationService -> 客户 : 25: 发送确认通知
+NotificationService -> DB : 26: 记录通知日志
+
+Frontend --> 客户 : 27: 显示支付成功页面
+
+@enduml

@@ -18,7 +18,7 @@ const roomConfigTemplates = {
     boardSize: '17x17', // 五子棋独有
     isPrivate: false,
   },
-  'tank-battle': {
+  'tank_battle': {
     title: '坦克大战房间',
     isPrivate: false,
   }

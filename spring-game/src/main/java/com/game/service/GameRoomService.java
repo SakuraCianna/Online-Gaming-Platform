@@ -14,10 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 @Transactional
@@ -41,7 +38,7 @@ public class GameRoomService {
     }
 
     public Map<String, Object> checkRoomCode(String roomCode) {
-        String key = "room:code:" + roomCode;
+        String key = redisKeyManager.buildRoomKey(roomCode);
         Boolean has = redisTemplate.hasKey(key);
         Map<String, Object> result = new HashMap<>();
         result.put("exists", has);
@@ -81,9 +78,9 @@ public class GameRoomService {
                     room.setGameConfig(gomokuConfig);
                     break;
 
-                case "tank-battle":
+                case "tank_battle":
                     room.setMaxPlayers(4);
-                    room.setMinPlayers(1);
+                    room.setMinPlayers(4);
                     room.setTeamMode(0); // 无队伍混战
                     Map<String, Object> tankConfig = new HashMap<>();
                     tankConfig.put("map", "classic");
@@ -104,7 +101,7 @@ public class GameRoomService {
         }
 
         // 存储到Redis（房间信息），直接存对象（由 RedisConfig 的 Jackson2 序列化）
-        String key = "room:code:" + room.getRoomCode();
+        String key = redisKeyManager.buildRoomKey(room.getRoomCode());
         try {
             Boolean success = redisTemplate.opsForValue().setIfAbsent(key, room);
             if (Boolean.FALSE.equals(success)) {
@@ -137,7 +134,7 @@ public class GameRoomService {
         player.setLeaveTime(null);
 
         // 存储到Redis（房间玩家信息，Hash结构），直接存对象
-        String playerKey = "room:players:" + roomCode;
+        String playerKey = redisKeyManager.buildPlayerKey(roomCode);
         try {
             redisTemplate.opsForHash().put(playerKey, String.valueOf(creatorId), player);
             // 设置玩家信息初始 TTL 为 24 小时
@@ -160,8 +157,8 @@ public class GameRoomService {
         long userId = Long.parseLong(request.get("userId").toString());
         String username = (String) request.getOrDefault("username", "某玩家");
 
-        String roomKey = "room:code:" + roomCode;
-        String playerKey = "room:players:" + roomCode;
+        String roomKey = redisKeyManager.buildRoomKey(roomCode);
+        String playerKey = redisKeyManager.buildPlayerKey(roomCode);
 
         // 获取房间信息
         Object roomObj = redisTemplate.opsForValue().get(roomKey);
@@ -215,7 +212,7 @@ public class GameRoomService {
         Map<String, Object> result = new HashMap<>();
 
         // 检查房间是否存在
-        String roomKey = "room:code:" + roomCode;
+        String roomKey = redisKeyManager.buildRoomKey(roomCode);
         Object roomValue = redisTemplate.opsForValue().get(roomKey);
         if (roomValue == null) {
             throw new BusinessException(404, "房间不存在");
@@ -268,7 +265,7 @@ public class GameRoomService {
 
         try {
             // 1. 检查房间是否存在
-            String roomKey = "room:code:" + roomCode;
+            String roomKey = redisKeyManager.buildRoomKey(roomCode);
             Object roomObj = redisTemplate.opsForValue().get(roomKey);
             if (roomObj == null) {
                 result.put("success", false);
@@ -278,7 +275,7 @@ public class GameRoomService {
             GameRoom room = objectMapper.convertValue(roomObj, GameRoom.class);
 
             // 2. 检查房间是否已满
-            String playerKey = "room:players:" + roomCode;
+            String playerKey = redisKeyManager.buildPlayerKey(roomCode);
             Long playerCount = redisTemplate.opsForHash().size(playerKey);
 
             // 使用房间配置的最大玩家数判断
@@ -423,7 +420,7 @@ public class GameRoomService {
         Map<String, Object> result = new HashMap<>();
 
         try {
-            String playerKey = "room:players:" + roomCode;
+            String playerKey = redisKeyManager.buildPlayerKey(roomCode);
             Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
 
             if (playersData.isEmpty()) {
@@ -516,7 +513,7 @@ public class GameRoomService {
             }
 
             // 从 Redis 中删除被踢玩家的信息
-            String playerKey = "room:players:" + roomCode;
+            String playerKey = redisKeyManager.buildPlayerKey(roomCode);
             Long deleted = redisTemplate.opsForHash().delete(playerKey, String.valueOf(kickedUserId));
 
             if (deleted == 0) {
@@ -553,7 +550,7 @@ public class GameRoomService {
     }
 
     private boolean isUserOnlineAndIdle(long userId) {
-        String userKey = "user:state:" + userId;
+        String userKey = redisKeyManager.buildUserStateKey(userId);
         Object onlineObj = redisTemplate.opsForHash().get(userKey, "online");
         Object currentGameObj = redisTemplate.opsForHash().get(userKey, "currentGame");
 
@@ -629,7 +626,7 @@ public class GameRoomService {
             }
 
             // 检查房间是否已满
-            String playerKey = "room:players:" + roomCode;
+            String playerKey = redisKeyManager.buildPlayerKey(roomCode);
             Long playerCount = redisTemplate.opsForHash().size(playerKey);
             int maxPlayers = room.getMaxPlayers() != null ? room.getMaxPlayers() : 2;
             if (playerCount >= maxPlayers) {
@@ -700,6 +697,204 @@ public class GameRoomService {
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", "添加AI失败: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * 切换玩家队伍
+     */
+    public Map<String, Object> switchTeam(Map<String, Object> request) {
+        String roomCode = (String) request.get("roomCode");
+        long userId = Long.parseLong(request.get("userId").toString());
+        int targetTeamId = Integer.parseInt(request.get("teamId").toString());
+
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            // 检查房间是否存在
+            String roomKey = "room:code:" + roomCode;
+            Object roomObj = redisTemplate.opsForValue().get(roomKey);
+            if (roomObj == null) {
+                result.put("success", false);
+                result.put("message", "房间不存在");
+                return result;
+            }
+            GameRoom room = objectMapper.convertValue(roomObj, GameRoom.class);
+
+            // 只有2v2模式才允许切换队伍
+            int teamMode = room.getTeamMode() != null ? room.getTeamMode() : 0;
+            if (teamMode != 2) {
+                result.put("success", false);
+                result.put("message", "当前模式不支持切换队伍");
+                return result;
+            }
+
+            // 获取玩家信息
+            String playerKey = redisKeyManager.buildPlayerKey(roomCode);
+            Object playerObj = redisTemplate.opsForHash().get(playerKey, String.valueOf(userId));
+            if (playerObj == null) {
+                result.put("success", false);
+                result.put("message", "玩家不在房间中");
+                return result;
+            }
+
+            RoomPlayer player = objectMapper.convertValue(playerObj, RoomPlayer.class);
+
+            // 检查目标队伍人数
+            Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
+            int targetTeamCount = 0;
+            for (Object value : playersData.values()) {
+                try {
+                    RoomPlayer p = objectMapper.convertValue(value, RoomPlayer.class);
+                    if (p.getTeamId() != null && p.getTeamId() == targetTeamId) {
+                        targetTeamCount++;
+                    }
+                } catch (Exception e) {
+                    // 忽略解析错误
+                }
+            }
+
+            // 2v2模式每队最多2人
+            if (targetTeamCount >= 2) {
+                result.put("success", false);
+                result.put("message", "目标队伍已满(2/2)");
+                return result;
+            }
+
+            // 更新玩家队伍
+            player.setTeamId(targetTeamId);
+            redisTemplate.opsForHash().put(playerKey, String.valueOf(userId), player);
+
+            // 刷新TTL
+            redisKeyManager.refreshRoomTTL(roomCode);
+
+            // 获取用户信息用于推送
+            User user = userMapper.selectById(userId);
+            String username = user != null ? user.getUsername() : "玩家";
+
+            // 推送队伍切换消息
+            Map<String, Object> switchMessage = new HashMap<>();
+            switchMessage.put("type", "teamSwitched");
+            switchMessage.put("userId", userId);
+            switchMessage.put("username", username);
+            switchMessage.put("teamId", targetTeamId);
+            switchMessage.put("message", username + " 加入了队伍" + (targetTeamId == 1 ? "A" : "B"));
+
+            messagingTemplate.convertAndSend("/topic/room/" + roomCode, switchMessage);
+
+            result.put("success", true);
+            result.put("message", "切换队伍成功");
+            result.put("teamId", targetTeamId);
+
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "切换队伍失败: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * 更新房间游戏模式和teamMode
+     */
+    public Map<String, Object> updateRoomMode(Map<String, Object> request) {
+        String roomCode = (String) request.get("roomCode");
+        long userId = Long.parseLong(request.get("userId").toString());
+        String mode = (String) request.get("mode"); // "1v1v1v1" or "2v2"
+
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            // 检查房间是否存在
+            String roomKey = "room:code:" + roomCode;
+            Object roomObj = redisTemplate.opsForValue().get(roomKey);
+            if (roomObj == null) {
+                result.put("success", false);
+                result.put("message", "房间不存在");
+                return result;
+            }
+            GameRoom room = objectMapper.convertValue(roomObj, GameRoom.class);
+
+            // 验证是否为房主
+            if (room.getCreatorId() != userId) {
+                result.put("success", false);
+                result.put("message", "只有房主可以更改游戏模式");
+                return result;
+            }
+
+            // 根据前端模式字符串设置teamMode
+            int teamMode = 0; // 默认为混战模式
+            if ("2v2".equals(mode)) {
+                teamMode = 2;
+            }
+
+
+            // 更新房间teamMode
+            room.setTeamMode(teamMode);
+            redisTemplate.opsForValue().set(roomKey, room);
+
+            // 如果切换到2v2模式，自动分配玩家队伍
+            if (teamMode == 2) {
+                String playerKey = redisKeyManager.buildPlayerKey(roomCode);
+                Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
+                
+                int assignedTeam = 1; // 从队伍1开始分配
+                
+                for (Map.Entry<Object, Object> entry : playersData.entrySet()) {
+                    try {
+                        RoomPlayer player = objectMapper.convertValue(entry.getValue(), RoomPlayer.class);
+                        
+                        // 房主固定在队伍1
+                        if (Objects.equals(player.getUserId(), room.getCreatorId())) {
+                            player.setTeamId(1);
+                        } else {
+                            // 其他玩家交替分配：1, 2, 1, 2
+                            player.setTeamId(assignedTeam);
+                            assignedTeam = (assignedTeam == 1) ? 2 : 1;
+                        }
+                        
+                        redisTemplate.opsForHash().put(playerKey, entry.getKey().toString(), player);
+                    } catch (Exception e) {
+                        // 忽略解析错误
+                    }
+                }
+            } else {
+                // 切换到混战模式，清空所有队伍分配
+                String playerKey = redisKeyManager.buildPlayerKey(roomCode);
+                Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
+                
+                for (Map.Entry<Object, Object> entry : playersData.entrySet()) {
+                    try {
+                        RoomPlayer player = objectMapper.convertValue(entry.getValue(), RoomPlayer.class);
+                        player.setTeamId(0); // 无队伍
+                        redisTemplate.opsForHash().put(playerKey, entry.getKey().toString(), player);
+                    } catch (Exception e) {
+                        // 忽略解析错误
+                    }
+                }
+            }
+
+            // 刷新TTL
+            redisKeyManager.refreshRoomTTL(roomCode);
+
+            // 推送模式更新消息
+            Map<String, Object> modeUpdateMessage = new HashMap<>();
+            modeUpdateMessage.put("type", "modeUpdated");
+            modeUpdateMessage.put("mode", mode);
+            modeUpdateMessage.put("teamMode", teamMode);
+            modeUpdateMessage.put("message", "游戏模式已更新为: " + (teamMode == 2 ? "2v2团队模式" : "混战模式"));
+
+            messagingTemplate.convertAndSend("/topic/room/" + roomCode, modeUpdateMessage);
+
+            result.put("success", true);
+            result.put("message", "游戏模式已更新");
+            result.put("teamMode", teamMode);
+
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "更新模式失败: " + e.getMessage());
         }
 
         return result;

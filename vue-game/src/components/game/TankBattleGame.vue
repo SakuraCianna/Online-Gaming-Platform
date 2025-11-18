@@ -150,7 +150,7 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, ref, computed, inject } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed, inject, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../../config/user'
 import { storeToRefs } from 'pinia'
@@ -170,6 +170,15 @@ const gameStarted = ref(false)
 const currentMode = ref(route.query.mode || '1v1v1v1')
 const roomCode = ref(route.query.roomCode || '')
 const gameId = ref(route.query.gameId || '')
+const DEFAULT_MAP_PATH = '/resource/maps/tankmap-1.json'
+const mapPath = ref(route.query.map || DEFAULT_MAP_PATH)
+
+watch(
+    () => route.query.map,
+    (value) => {
+        mapPath.value = value || DEFAULT_MAP_PATH
+    }
+)
 
 // 地图数据
 const currentMapData = ref(null)
@@ -280,8 +289,9 @@ let sendInputInterval = null  // 发送玩家输入的定时器
 
 // 加载地图
 async function loadMap() {
+    const targetPath = mapPath.value || DEFAULT_MAP_PATH
     try {
-        const response = await fetch('/resource/maps/tankmap-1.json')
+        const response = await fetch(targetPath, { cache: 'no-cache' })
         if (!response.ok) {
             throw new Error('地图加载失败')
         }
@@ -289,13 +299,15 @@ async function loadMap() {
         currentMapData.value = data
         return data
     } catch (error) {
-        console.error('地图加载错误:', error)
-        return {
+        console.error(`地图加载错误 (${targetPath}):`, error)
+        const fallback = {
             id: 'default',
             name: '默认地图',
             size: { width: 1200, height: 800 },
             walls: []
         }
+        currentMapData.value = fallback
+        return fallback
     }
 }
 
@@ -530,7 +542,7 @@ function handleGameEnd(data) {
 
         // 3秒后返回房间
         setTimeout(() => {
-            router.push('/game/tank-battle')
+            router.push('/game/tank_battle')
         }, 3000)
     } catch (error) {
         console.error('处理游戏结束失败:', error)
@@ -562,7 +574,7 @@ function handleStageClick() {
 
 // 退出游戏
 const exitGame = () => {
-    router.push('/game/tank-battle')
+    router.push('/game/tank_battle')
 }
 
 // 初始化游戏（客户端只负责初始化渲染，不运行游戏逻辑）

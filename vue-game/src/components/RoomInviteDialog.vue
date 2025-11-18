@@ -77,7 +77,7 @@ async function rejectInvite() {
 // 游戏名称映射
 const gameNameMap = {
   'gomoku': '五子棋',
-  'tank-battle': '坦克大战',
+  'tank_battle': '坦克大战',
   'minesweeper': '扫雷',
   '2048': '2048'
 }

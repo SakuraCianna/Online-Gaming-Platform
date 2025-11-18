@@ -481,8 +481,7 @@ function handleGameStartEvent(data) {
   if (data.player1Id && data.player2Id) {
     const amIPlayer1 = user.value?.id === data.player1Id
     const myGameColor = amIPlayer1 ? 'black' : 'white'
-    // 从 WebSocket 消息中获取房主的颜色设置，而不是硬编码
-    const isBlackFirst = data.isBlackFirst !== undefined ? data.isBlackFirst : true
+    const isBlackFirst = data.isBlackFirst === undefined ? true : data.isBlackFirst
 
     ElMessage.success('游戏即将开始...')
 

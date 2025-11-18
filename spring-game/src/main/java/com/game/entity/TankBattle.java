@@ -19,7 +19,7 @@ public class TankBattle {
     private Long userId;
     private Long roomId;
 
-    private String mapName; // 地图名称
+    private String map; // 地图静态地址
     @TableField(value = "game_data", typeHandler = JacksonTypeHandler.class)
     private Map<String, Object> gameData; // JSON数据
     private Integer kills; // 击杀

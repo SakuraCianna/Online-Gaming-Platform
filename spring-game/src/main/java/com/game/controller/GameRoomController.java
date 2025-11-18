@@ -78,4 +78,18 @@ public class GameRoomController {
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/switchTeam")
+    public ResponseEntity<Map<String, Object>> switchTeam(@RequestBody Map<String, Object> request) {
+        Map<String, Object> result = gameRoomService.switchTeam(request);
+        result.put("code", 200);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/updateMode")
+    public ResponseEntity<Map<String, Object>> updateRoomMode(@RequestBody Map<String, Object> request) {
+        Map<String, Object> result = gameRoomService.updateRoomMode(request);
+        result.put("code", 200);
+        return ResponseEntity.ok(result);
+    }
+
 }

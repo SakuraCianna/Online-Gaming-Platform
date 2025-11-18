@@ -96,7 +96,7 @@ public class GomokuService {
             Long player2Id = Long.parseLong(request.get("player2Id").toString());
             Boolean isAIGame = (Boolean) request.getOrDefault("isAIGame", false);
 
-            String roomKey = "room:code:" + roomCode;
+            String roomKey = redisKeyManager.buildRoomKey(roomCode);
             Object gameRoomObj = redisTemplate.opsForValue().get(roomKey);
 
             if (gameRoomObj == null) {
@@ -109,7 +109,9 @@ public class GomokuService {
             if (!gameRoom.getCreatorId().equals(userId)) {
                 throw new BusinessException(403, "开始游戏发起人不是房主!");
             }
-
+            if (gameRoom.getStatus() != 0) {
+                throw new BusinessException(400, "游戏已开始");
+            }
             // 修改GameRoom状态
             gameRoom.setStartTime(LocalDateTime.now());
             gameRoom.setStatus(1);

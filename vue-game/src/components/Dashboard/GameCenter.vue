@@ -38,7 +38,7 @@ const games = ref([
     online: 0
   },
   {
-    id: 'tank-battle',
+    id: 'tank_battle',
     name: '坦克大战',
     icon: '🚗',
     description: '双人对战',

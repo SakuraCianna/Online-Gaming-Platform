@@ -1,6 +1,7 @@
 package com.game.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.game.component.RedisKeyManager;
 import com.game.exception.BusinessException;
 import com.game.mapper.FriendMapper;
 import com.game.vo.FriendVO;
@@ -21,15 +22,16 @@ import java.util.Map;
 public class FriendService {
 
     private final FriendMapper friendMapper;
-    // 使用 StringRedisTemplate：读取用户状态,与 UserStateService 保持一致
     private final StringRedisTemplate stringRedisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
+    private final RedisKeyManager redisKeyManager;
 
     public FriendService(FriendMapper friendMapper, StringRedisTemplate stringRedisTemplate,
-            SimpMessagingTemplate messagingTemplate) {
+            SimpMessagingTemplate messagingTemplate, RedisKeyManager redisKeyManager) {
         this.friendMapper = friendMapper;
         this.stringRedisTemplate = stringRedisTemplate;
         this.messagingTemplate = messagingTemplate;
+        this.redisKeyManager = redisKeyManager;
     }
 
     public Map<String, Object> getAllFriend(long id, int page, int pageSize) {
@@ -160,7 +162,7 @@ public class FriendService {
 
     private void addFriendState(FriendVO vo) {
         Long friendId = vo.getId();
-        String key = "user:state:" + friendId;
+        String key = redisKeyManager.buildUserStateKey(friendId);
 
         List<Object> vals = stringRedisTemplate.opsForHash()
                 .multiGet(key, Arrays.asList("online", "currentGame"));
