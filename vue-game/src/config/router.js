@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginRegister from '../components/LoginRegister.vue'
 import { useUserStore } from './user'
-import request from './api'
 
 const routes = [
   {
@@ -110,55 +109,21 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach(async (to, from, next) => {
+router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
   const token = userStore.token
 
-  console.log('[Router] 路由守卫检查:', {
-    to: to.path,
-    from: from.path,
-    requiresAuth: to.meta.requiresAuth,
-    hasToken: !!token
-  })
-
   if (to.meta.requiresAuth) {
     if (!token) {
-      console.log('[Router] 无Token，跳转登录页')
       next('/')
       return
     }
-    
-    try {
-      // 验证 token 是否有效
-      console.log('[Router] 验证Token有效性')
-      await request.get('/user/verifyToken', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      })
-      console.log('[Router] Token验证通过，允许访问')
-      next()
-    } catch (error) {
-      console.error('[Router] Token验证失败:', error)
-      
-      // Token无效（过期或错误），清除本地数据
-      localStorage.removeItem('token')
-      userStore.clear()
-      
-      // 如果是401错误，说明token过期，提示信息已经在api.js的拦截器中处理
-      // 这里只需要静默跳转到登录页
-      if (error.response?.status === 401) {
-        console.log('[Router] Token已过期，跳转登录页（提示已由API拦截器处理）')
-      }
-      
-      next('/')
-    }
+    // 只要有 Token 就放行，有效性由 API 拦截器处理
+    next()
   } else if (token && to.path === '/') {
     // 已登录用户访问登录页，重定向到用户中心
-    console.log('[Router] 已登录，跳转用户中心')
     next('/user')
   } else {
-    console.log('[Router] 无需认证，直接访问')
     next()
   }
 })

@@ -24,22 +24,55 @@ const boardRef = ref(null)
 const inviting = ref({})
 const inviteCooldown = ref({})
 const cooldownTimer = ref(null)
+const addingAI = ref({}) // 添加AI的loading状态
+const gameStartSubscription = ref(null) // 游戏开始订阅
 
 // 游戏模式选择（默认值）
 const selectedMode = ref('1v1v1v1')
+const switchingMode = ref(false) // 模式切换中，用于锁定页面
+const switchingTeam = ref(false) // 队伍切换中，用于锁定
 
-// 监听模式切换，通知后端更新teamMode
-watch(selectedMode, async (newMode) => {
+// 是否为房主
+const isRoomOwner = computed(() => {
+    return roomInfo.value?.creatorId === user.value?.id
+})
+
+// 监听模式切换，通知后端重新分配队伍/座位
+watch(selectedMode, async (newMode, oldMode) => {
     if (!roomInfo.value?.roomCode || !user.value?.id) return
+    if (switchingMode.value) return // 防止重复触发
+    if (!oldMode) return // 首次加载时跳过
+    
+    switchingMode.value = true
     
     try {
-        await request.post('/room/updateMode', {
+        const response = await request.post('/room/switchMode', {
             roomCode: roomInfo.value.roomCode,
-            userId: user.value.id,
-            mode: newMode
+            mode: newMode,
+            oldMode: oldMode
         })
+        
+        if (response.data.success || response.data.code === 200) {
+            // 后端会通过WebSocket广播模式切换消息，前端等待消息更新UI
+            ElMessage.success('正在切换模式，请稍候...')
+            // 设置超时保护，防止WebSocket消息丢失导致永久锁定
+            setTimeout(() => {
+                if (switchingMode.value) {
+                    switchingMode.value = false
+                    ElMessage.warning('模式切换超时，请刷新页面')
+                }
+            }, 10000)
+        } else {
+            ElMessage.error(response.data.message || '切换模式失败')
+            // 恢复旧模式
+            selectedMode.value = oldMode
+            switchingMode.value = false
+        }
     } catch (e) {
-        console.error('更新游戏模式失败:', e)
+        console.error('切换游戏模式失败:', e)
+        ElMessage.error('切换模式失败，请重试')
+        selectedMode.value = oldMode
+        switchingMode.value = false
     }
 })
 
@@ -69,21 +102,21 @@ function assignRandomMap() {
 
 async function discoverMapFiles() {
     const candidateIndices = Array.from({ length: 20 }, (_, i) => i + 1)
-    const discovered = []
 
-    for (const index of candidateIndices) {
+    // 使用 Promise.all 并行检测所有地图文件，提高加载速度
+    const checkPromises = candidateIndices.map(async (index) => {
         const candidate = `tankmap-${index}.json`
         const candidatePath = `${MAP_STATIC_PREFIX}${candidate}`
-        const response = await fetch(candidatePath, { method: 'HEAD' }).catch(error => {
-            if (import.meta.env.DEV) {
-                console.debug(`地图文件未找到: ${candidatePath}`)
-            }
+        try {
+            const response = await fetch(candidatePath, { method: 'HEAD' })
+            return response.ok ? candidate : null
+        } catch {
             return null
-        })
-        if (response && response.ok) {
-            discovered.push(candidate)
         }
-    }
+    })
+
+    const results = await Promise.all(checkPromises)
+    const discovered = results.filter(name => name !== null)
 
     if (discovered.length > 0) {
         mapFiles.value = discovered
@@ -96,21 +129,37 @@ const gameModes = [
 ]
 
 // 玩家座位（最多4人）
+// 左侧两个（索引0,2）是队伍A（蓝色），右侧两个（索引1,3）是队伍B（红色）
 const seats = ref([
-    { id: 1, player: null, team: 0 },
-    { id: 2, player: null, team: 0 },
-    { id: 3, player: null, team: 1 },
-    { id: 4, player: null, team: 1 }
+    { id: 1, player: null, team: 1, ready: false },  // 左上 - 队伍A（蓝）
+    { id: 2, player: null, team: 2, ready: false },  // 右上 - 队伍B（红）
+    { id: 3, player: null, team: 1, ready: false },  // 左下 - 队伍A（蓝）
+    { id: 4, player: null, team: 2, ready: false }   // 右下 - 队伍B（红）
 ])
+
+// 计算AI编号（使用全局计数确保编号连续）
+const getAINumber = (index) => {
+    const allAIPlayers = seats.value
+        .map((seat, idx) => ({ seat, idx }))
+        .filter(item => item.seat.player?.isAI)
+    
+    const currentAIIndex = allAIPlayers.findIndex(item => item.idx === index)
+    return currentAIIndex !== -1 ? currentAIIndex + 1 : 0
+}
 
 // 当前选择的模式配置
 const currentModeConfig = computed(() => {
     return gameModes.find(m => m.value === selectedMode.value)
 })
 
+// 计算当前占用的座位数
+const occupiedSeatsCount = computed(() => {
+    return seats.value.filter(s => s.player !== null).length
+})
+
 // 是否可以开始游戏
 const canStartGame = computed(() => {
-    const occupiedSeats = seats.value.filter(s => s.player !== null).length
+    const occupiedSeats = occupiedSeatsCount.value
     const required = currentModeConfig.value?.players || 4
 
     if (selectedMode.value === 'practice') {
@@ -122,42 +171,51 @@ const canStartGame = computed(() => {
 
 // AI对手
 async function addAI(seatIndex) {
-    if (seats.value[seatIndex].player) return
+    
+    if (seats.value[seatIndex].player) {
+        return
+    }
 
     if (!roomInfo.value?.roomCode) {
         ElMessage.error('房间信息不存在')
         return
     }
 
+    // 设置loading状态
+    addingAI.value[seatIndex] = true
+
     try {
+        // 获取目标座位的队伍和位置信息
+        const targetSeat = seats.value[seatIndex]
+        
         // 调用后端接口，将AI玩家信息存入Redis
         const response = await request.post('/room/addAI', {
             roomCode: roomInfo.value.roomCode,
             userId: user.value?.id,
-            aiDifficulty: 'medium' // 默认中等难度
+            aiDifficulty: 'medium', // 默认中等难度
+            targetTeamId: targetSeat.team, // 传递目标队伍
+            targetSeatIndex: seatIndex // 传递座位索引
         })
 
+        console.log('添加AI响应:', response.data)
+
         if (response.data.success || response.data.code === 200) {
-            seats.value[seatIndex].player = {
-                id: response.data.aiUserId, // 使用后端返回的AI ID
-                username: response.data.aiDisplayName || `AI ${seatIndex + 1}`,
-                isAI: true,
-                avatar: '/image/default-avatar.jpg'
-            }
-            ElMessage.success('AI已加入房间')
+            // 这里不需要本地立即更新，避免与WebSocket消息冲突
         } else {
+            console.error('添加AI失败，返回信息:', response.data)
             ElMessage.error(response.data.message || '添加AI失败')
         }
     } catch (error) {
-        console.error('添加AI失败:', error)
+        console.error('添加AI异常:', error)
         ElMessage.error('添加AI失败，请稍后重试')
+    } finally {
+        addingAI.value[seatIndex] = false
     }
 }
 
 async function removePlayer(seatIndex) {
-    if (!seats.value[seatIndex].player) return
-
     const player = seats.value[seatIndex].player
+    if (!player) return
 
     // 不能移除自己
     if (player.id === user.value?.id) {
@@ -169,7 +227,6 @@ async function removePlayer(seatIndex) {
     try {
         await request.post('/room/kick', {
             roomCode: roomInfo.value?.roomCode,
-            kickerId: user.value?.id,
             kickerName: user.value?.username,
             kickedUserId: player.id || 0,
             kickedUserName: player.username || 'AI Player'
@@ -177,10 +234,74 @@ async function removePlayer(seatIndex) {
 
         // 本地移除（WebSocket消息会同步更新，但这里提前更新UI）
         seats.value[seatIndex].player = null
+        seats.value[seatIndex].ready = false
         ElMessage.success('已将玩家移出房间')
     } catch (e) {
         console.error('踢出玩家失败:', e)
         ElMessage.error('踢出玩家失败，请重试')
+    }
+}
+
+// 切换队伍（只能切换到空位）
+async function switchToTeam(targetTeamId) {
+    if (!user.value?.id || !roomInfo.value?.roomCode) return
+    if (switchingTeam.value) {
+        ElMessage.warning('正在切换队伍，请稍候')
+        return
+    }
+    
+    // 检查是否为2v2模式
+    if (selectedMode.value !== '2v2') {
+        ElMessage.warning('只有团队模式才能切换队伍')
+        return
+    }
+    
+    // 查找当前玩家的座位
+    const currentSeatIndex = seats.value.findIndex(seat => 
+        seat.player?.id === user.value.id
+    )
+    
+    if (currentSeatIndex === -1) {
+        ElMessage.error('未找到您的座位')
+        return
+    }
+    
+    const currentTeamId = seats.value[currentSeatIndex].team
+    
+    // 检查是否尝试切换到同一队伍
+    if (currentTeamId === targetTeamId) {
+        ElMessage.warning('您已经在这个队伍中了')
+        return
+    }
+    
+    // 查找目标队伍的空座位
+    const targetEmptySeat = seats.value.find(seat => 
+        seat.team === targetTeamId && !seat.player
+    )
+    
+    if (!targetEmptySeat) {
+        ElMessage.warning('目标队伍没有空位')
+        return
+    }
+    
+    switchingTeam.value = true
+    
+    try {
+        const response = await request.post('/room/switchTeam', {
+            roomCode: roomInfo.value.roomCode,
+            targetTeamId: targetTeamId
+        })
+        
+        if (response.data.success || response.data.code === 200) {
+            // WebSocket会广播teamSwitched消息更新UI
+        } else {
+            ElMessage.error(response.data.message || '切换队伍失败')
+            switchingTeam.value = false
+        }
+    } catch (error) {
+        console.error('切换队伍失败:', error)
+        ElMessage.error('切换队伍失败，请重试')
+        switchingTeam.value = false
     }
 }
 
@@ -189,7 +310,7 @@ async function loadFriends() {
     if (!user.value?.id) return
     try {
         const res = await request.get('/friend/getAllFriend', {
-            params: { id: user.value.id, page: 1, pageSize: 9999 }
+            params: { id: user.value.id, page: 1, pageSize: 100 } // 限制为100个，足够显示
         })
         userStore.setFriends(res?.data?.data || [], res?.data?.total || 0)
     } catch (e) {
@@ -257,7 +378,7 @@ function startCooldownTimer() {
         if (Object.keys(inviteCooldown.value).length === 0) {
             stopCooldownTimer()
         }
-    }, 100)
+    }, 1000) // 改为1秒更新一次，减少性能消耗
 }
 
 function stopCooldownTimer() {
@@ -267,31 +388,7 @@ function stopCooldownTimer() {
     }
 }
 
-// 切换队伍
-async function switchTeam(targetTeamId) {
-    if (!roomInfo.value?.roomCode || !user.value?.id) return
-    if (selectedMode.value !== '2v2') {
-        ElMessage.warning('只有2v2模式才能切换队伍')
-        return
-    }
-
-    try {
-        const resp = await request.post('/room/switchTeam', {
-            roomCode: roomInfo.value.roomCode,
-            userId: user.value.id,
-            teamId: targetTeamId
-        })
-
-        if (resp?.data?.success || resp?.data?.code === 200) {
-            ElMessage.success('已切换到队伍' + (targetTeamId === 1 ? 'A' : 'B'))
-        } else {
-            ElMessage.error(resp?.data?.message || '切换队伍失败')
-        }
-    } catch (e) {
-        ElMessage.error('切换队伍失败')
-        console.error('switchTeam failed', e)
-    }
-}
+// 此函数已删除，统一使用switchToTeam函数
 
 async function inviteFriend(friend) {
     if (!friend?.id || !user.value?.id) return
@@ -317,7 +414,6 @@ async function inviteFriend(friend) {
     inviting.value[friend.id] = true
     try {
         const resp = await request.post('/room/invite', {
-            userId: user.value.id,
             friendId: friend.id,
             roomCode: roomInfo.value?.roomCode,
             gameName: 'tank_battle'
@@ -355,7 +451,6 @@ async function startGame() {
         assignRandomMap()
 
         const response = await request.post(`/tankbattle/${roomInfo.value?.roomCode}/start`, {
-            userId: user.value?.id,
             mode: modeValue,
             map: selectedMapPath.value,
         })
@@ -364,7 +459,7 @@ async function startGame() {
             ElMessage.success('游戏启动中...')
             // 订阅游戏开始事件，收到后跳转
             if (wsService) {
-                wsService.subscribe(`/topic/tankbattle/${roomInfo.value?.roomCode}/gameStart`, (msg) => {
+                gameStartSubscription.value = wsService.subscribe(`/topic/tankbattle/${roomInfo.value?.roomCode}/gameStart`, (msg) => {
                     try {
                         JSON.parse(msg.body)
                         // 跳转到游戏页面
@@ -397,7 +492,6 @@ async function goBack() {
         try {
             await request.post('/room/leave', {
                 roomCode: roomInfo.value.roomCode,
-                userId: user.value?.id,
                 username: user.value?.username
             })
         } catch (error) {
@@ -421,19 +515,62 @@ async function loadRoomPlayers() {
             // 清空所有座位
             for (const seat of seats.value) {
                 seat.player = null
+                seat.ready = false
             }
 
-            // 将玩家分配到座位
-            for (let index = 0; index < players.length && index < seats.value.length; index++) {
-                const playerData = players[index]
-                seats.value[index].player = {
-                    id: playerData.userId,
-                    username: playerData.username,
-                    avatar: playerData.avatar || '/image/default-avatar.jpg',
-                    isAI: playerData.isAi === 1
+            if (selectedMode.value === '2v2') {
+                // 2v2模式：按队伍分配座位
+                // 左侧座位（0,2）给队伍A（teamId=1），右侧座位（1,3）给队伍B（teamId=2）
+                const team1Players = players.filter(p => p.teamId === 1)
+                const team2Players = players.filter(p => p.teamId === 2)
+                
+                // 队伍1分配到左侧
+                const team1Seats = [0, 2]
+                team1Players.forEach((playerData, idx) => {
+                    if (idx < team1Seats.length) {
+                        const seatIndex = team1Seats[idx]
+                        const isAI = playerData.isAi === 1
+                        seats.value[seatIndex].player = {
+                            id: playerData.userId,
+                            username: playerData.username,
+                            avatar: playerData.avatar || '/image/default-avatar.jpg',
+                            isAI: isAI
+                        }
+                        seats.value[seatIndex].team = 1
+                        seats.value[seatIndex].ready = isAI || playerData.isReady === 1
+                    }
+                })
+                
+                // 队伍2分配到右侧
+                const team2Seats = [1, 3]
+                team2Players.forEach((playerData, idx) => {
+                    if (idx < team2Seats.length) {
+                        const seatIndex = team2Seats[idx]
+                        const isAI = playerData.isAi === 1
+                        seats.value[seatIndex].player = {
+                            id: playerData.userId,
+                            username: playerData.username,
+                            avatar: playerData.avatar || '/image/default-avatar.jpg',
+                            isAI: isAI
+                        }
+                        seats.value[seatIndex].team = 2
+                        seats.value[seatIndex].ready = isAI || playerData.isReady === 1
+                    }
+                })
+            } else {
+                // 混战模式：按顺序分配座位
+                for (let index = 0; index < players.length && index < seats.value.length; index++) {
+                    const playerData = players[index]
+                    const isAI = playerData.isAi === 1
+                    seats.value[index].player = {
+                        id: playerData.userId,
+                        username: playerData.username,
+                        avatar: playerData.avatar || '/image/default-avatar.jpg',
+                        isAI: isAI
+                    }
+                    seats.value[index].team = 0 // 混战模式无队伍
+                    seats.value[index].ready = isAI || playerData.isReady === 1
                 }
-                // 设置队伍信息
-                seats.value[index].team = playerData.teamId || 0
             }
         }
     } catch (e) {
@@ -452,10 +589,38 @@ async function handleRoomMessage(data) {
             isAI: data.isAI || false
         }
 
-        // 找到第一个空座位
-        const emptySeatIndex = seats.value.findIndex(seat => !seat.player)
+        // 优先使用后端传递的 position 信息确定座位
+        let emptySeatIndex = -1
+        
+        if (data.position !== undefined && data.position !== null && typeof data.position === 'number') {
+            // position 从 1 开始，需要减 1 转换为索引
+            const targetIndex = data.position - 1
+            // 检查目标位置是否有效且为空
+            if (targetIndex >= 0 && targetIndex < seats.value.length && !seats.value[targetIndex].player) {
+                emptySeatIndex = targetIndex
+            }
+        }
+        
+        // 如果 position 无效或已被占用，退回到查找空座位
+        if (emptySeatIndex === -1) {
+            if (selectedMode.value === '2v2' && data.teamId !== undefined && data.teamId !== null) {
+                // 优先找与队伍匹配的空座位
+                emptySeatIndex = seats.value.findIndex(seat => !seat.player && seat.team === data.teamId)
+            }
+            // 如果没找到匹配的或不是2v2模式，找任意空座位
+            if (emptySeatIndex === -1) {
+                emptySeatIndex = seats.value.findIndex(seat => !seat.player)
+            }
+        }
+
         if (emptySeatIndex !== -1) {
             seats.value[emptySeatIndex].player = newPlayer
+            // 设置队伍信息（2v2模式）
+            if (data.teamId !== undefined && data.teamId !== null) {
+                seats.value[emptySeatIndex].team = data.teamId
+            }
+            // AI自动就位
+            seats.value[emptySeatIndex].ready = newPlayer.isAI
             ElMessage.success(`${data.username} 已加入房间`)
         }
     } else if (data.type === 'memberLeft') {
@@ -464,18 +629,23 @@ async function handleRoomMessage(data) {
         const seatIndex = seats.value.findIndex(seat => seat.player?.id === leftPlayerId)
         if (seatIndex !== -1) {
             seats.value[seatIndex].player = null
+            seats.value[seatIndex].ready = false
             ElMessage.info(`${data.username || '某玩家'} 已退出房间`)
         }
     } else if (data.type === 'kicked') {
-        // 玩家被踢出
-        if (data.kickedUserId === user.value?.id) {
+        // 玩家被踢出（支持字符串和数字类型的ID比较）
+        const kickedId = String(data.kickedUserId)
+        const currentUserId = String(user.value?.id || '')
+        
+        if (kickedId === currentUserId) {
             ElMessage.warning(`你已被房主 ${data.kickerName || ''} 移出房间`)
             roomStore.clearCurrentRoom()
             setTimeout(() => router.push('/user/games'), 1500)
         } else {
-            const seatIndex = seats.value.findIndex(seat => seat.player?.id === data.kickedUserId)
+            const seatIndex = seats.value.findIndex(seat => String(seat.player?.id || '') === kickedId)
             if (seatIndex !== -1) {
                 seats.value[seatIndex].player = null
+                seats.value[seatIndex].ready = false
                 ElMessage.info(`${data.kickedUserName || '玩家'} 已被移出房间`)
             }
         }
@@ -484,19 +654,35 @@ async function handleRoomMessage(data) {
         roomStore.clearCurrentRoom()
         router.push('/user/games')
     } else if (data.type === 'teamSwitched') {
-        // 玩家切换队伍
-        const seatIndex = seats.value.findIndex(seat => seat.player?.id === data.userId)
-        if (seatIndex !== -1 && seats.value[seatIndex].player) {
-            seats.value[seatIndex].team = data.teamId
-        }
-        if (data.userId !== user.value?.id) {
+        // 玩家切换队伍完成
+        
+        // 重新加载玩家列表以获取最新的座位安排
+        await loadRoomPlayers()
+        
+        // 解锁队伍切换
+        switchingTeam.value = false
+        
+        // 显示提示消息
+        if (data.userId === user.value?.id) {
+            ElMessage.success('切换队伍成功')
+        } else if (data.message) {
             ElMessage.info(data.message)
         }
-    } else if (data.type === 'modeUpdated') {
-        // 游戏模式更新
-        ElMessage.info(data.message)
-        // 重新加载玩家列表以获取最新的队伍分配
+    } else if (data.type === 'modeSwitched') {
+        // 游戏模式切换完成
+        
+        // 更新模式（不触发watch）
+        if (data.mode) {
+            selectedMode.value = data.mode
+        }
+        
+        // 重新加载玩家列表以获取最新的队伍分配和座位安排
         await loadRoomPlayers()
+        
+        // 解锁页面
+        switchingMode.value = false
+        
+        ElMessage.success(data.message || '模式切换完成')
     }
 }
 
@@ -532,16 +718,8 @@ onMounted(async () => {
     // 加载数据
     await loadFriends()
     await loadRoomPlayers()
-
-    // 如果加载后第一个座位为空，将当前用户放入第一个座位（兼容旧逻辑）
-    if (!seats.value[0].player && user.value) {
-        seats.value[0].player = {
-            id: user.value.id,
-            username: user.value.username,
-            avatar: user.value.avatar || '/image/default-avatar.jpg',
-            isAI: false
-        }
-    }
+    
+    // 删除了冲突的兼容逻辑，完全依赖后端数据
 
     discoverMapFiles().catch(error => {
         console.error('加载地图列表失败:', error)
@@ -578,7 +756,6 @@ onBeforeUnmount(async () => {
         try {
             await request.post('/room/leave', {
                 roomCode: roomInfo.value.roomCode,
-                userId: user.value.id,
                 username: user.value.username
             })
         } catch (error) {
@@ -589,6 +766,12 @@ onBeforeUnmount(async () => {
     // 取消 WebSocket 订阅
     if (wsService && roomInfo.value?.roomCode) {
         wsService.unsubscribe(`/topic/room/${roomInfo.value.roomCode}`)
+        
+        // 取消游戏开始事件订阅
+        if (gameStartSubscription.value) {
+            wsService.unsubscribe(`/topic/tankbattle/${roomInfo.value.roomCode}/gameStart`)
+            gameStartSubscription.value = null
+        }
     }
 })
 </script>
@@ -647,11 +830,13 @@ onBeforeUnmount(async () => {
                         游戏设置
                     </div>
 
-                    <!-- 模式选择 -->
+                    <!-- 模式选择（只有房主可操作） -->
                     <div class="mode-selector">
                         <button v-for="mode in gameModes" :key="mode.value"
                             :class="['mode-chip', { active: selectedMode === mode.value }]"
-                            @click="selectedMode = mode.value">
+                            :disabled="!isRoomOwner || switchingMode"
+                            @click="selectedMode = mode.value"
+                            :title="isRoomOwner ? mode.description : '只有房主可以切换模式'">
                             <span class="mode-name">{{ mode.label }}</span>
                             <span class="mode-info">{{ mode.description }}</span>
                         </button>
@@ -707,31 +892,73 @@ onBeforeUnmount(async () => {
 
             <!-- 中间：玩家席位 -->
             <main class="players-area">
+                <!-- 模式切换加载遮罩 -->
+                <div v-if="switchingMode" class="switching-overlay">
+                    <div class="switching-content">
+                        <Icon icon="mdi:loading" class="spin" width="48" />
+                        <div class="switching-text">正在切换模式...</div>
+                        <div class="switching-hint">请稍候，正在重新分配队伍</div>
+                    </div>
+                </div>
+                
                 <div class="area-header">
                     <h2>准备区域</h2>
-                    <span class="player-count">{{seats.filter(s => s.player).length}}/{{ currentModeConfig?.players ||
+                    <span class="player-count">{{ occupiedSeatsCount }}/{{ currentModeConfig?.players ||
                         4 }}</span>
+                </div>
+                
+                <div v-if="selectedMode === '2v2'" class="team-mode-hint">
+                    <div class="team-hint team-a-hint">
+                        <Icon icon="mdi:shield" width="16" />
+                        <span>队伍 A（蓝）</span>
+                    </div>
+                    <div class="team-hint team-b-hint">
+                        <Icon icon="mdi:shield" width="16" />
+                        <span>队伍 B（红）</span>
+                    </div>
                 </div>
 
                 <div :class="['seats-layout', { 'mode-2v2': selectedMode === '2v2' }]">
                     <div v-for="(seat, index) in seats" :key="seat.id"
                         v-show="selectedMode !== 'practice' || index === 0" :class="['player-slot', {
                             filled: seat.player,
-                            'team-a': selectedMode === '2v2' && seat.team === 0,
-                            'team-b': selectedMode === '2v2' && seat.team === 1
+                            'team-a': selectedMode === '2v2' && seat.team === 1,
+                            'team-b': selectedMode === '2v2' && seat.team === 2
                         }]">
 
                         <template v-if="seat.player">
                             <div class="slot-content">
-                                <img :src="seat.player.avatar" :alt="seat.player.username + '的头像'" class="player-img" />
-                                <div class="player-info">
-                                    <span class="player-username">{{ seat.player.username }}</span>
-                                    <span class="player-badge" v-if="seat.player.isAI">🤖 AI</span>
-                                    <span class="player-badge me" v-else-if="seat.player.id === user?.id">👤 你</span>
+                                <div class="player-avatar-wrapper">
+                                    <img :src="seat.player.avatar" :alt="seat.player.username + '的头像'" class="player-img" />
+                                    <span class="player-badge" :class="{
+                                        'badge-ai': seat.player.isAI,
+                                        'badge-me': seat.player.id === user?.id
+                                    }">
+                                        {{ seat.player.isAI ? `AI #${getAINumber(index)}` : '你' }}
+                                    </span>
                                 </div>
-                                <button v-if="seat.player.id !== user?.id" class="btn-remove"
+                                <div class="player-info">
+                                    <div class="player-username">{{ seat.player.username }}</div>
+                                    <div class="player-status" :class="{ ready: seat.ready }">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text">{{ seat.ready ? '已就位' : '准备中' }}</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 切换队伍按钮（只有本人且在2v2模式下显示） -->
+                                <button v-if="seat.player.id === user?.id && selectedMode === '2v2' && !seat.player.isAI" 
+                                    class="btn-switch-team"
+                                    :disabled="switchingTeam || switchingMode"
+                                    @click="switchToTeam(seat.team === 1 ? 2 : 1)"
+                                    :title="`切换到${seat.team === 1 ? '队伍B' : '队伍A'}`">
+                                    <Icon icon="mdi:swap-horizontal" width="16" />
+                                </button>
+                                
+                                <!-- 踢出按钮（房主踢其他人） -->
+                                <button v-if="isRoomOwner && seat.player.id !== user?.id" class="btn-remove"
+                                    :disabled="switchingMode || switchingTeam"
                                     @click="removePlayer(index)">
-                                    <Icon icon="mdi:close" width="14" />
+                                    <Icon icon="mdi:close" width="16" />
                                 </button>
                             </div>
                         </template>
@@ -740,20 +967,25 @@ onBeforeUnmount(async () => {
                             <div class="slot-empty">
                                 <Icon icon="mdi:account-plus-outline" width="32" />
                                 <span>等待玩家</span>
-                                <button class="btn-add-ai" @click="addAI(index)">
-                                    添加 AI
+                                <!-- 只有房主才能添加AI -->
+                                <button v-if="isRoomOwner" class="btn-add-ai" 
+                                    :disabled="switchingMode || switchingTeam || addingAI[index]" 
+                                    @click="addAI(index)">
+                                    <Icon v-if="addingAI[index]" icon="mdi:loading" class="spin" width="16" />
+                                    <Icon v-else icon="mdi:robot" width="16" />
+                                    <span>{{ addingAI[index] ? '添加中...' : '添加 AI' }}</span>
                                 </button>
                             </div>
                         </template>
                     </div>
                 </div>
 
-                <!-- 开始按钮 -->
-                <button class="btn-start-game" :disabled="!canStartGame" @click="startGame">
+                <!-- 开始按钮（只有房主可见） -->
+                <button v-if="isRoomOwner" class="btn-start-game" 
+                    :disabled="switchingMode || switchingTeam || !canStartGame" 
+                    @click="startGame">
                     <Icon icon="mdi:rocket-launch" width="20" />
-                    <span>{{canStartGame ? '开始战斗' : `等待玩家 (${seats.filter(s =>
-                        s.player).length}/${currentModeConfig?.players})`
-                    }}</span>
+                    <span>{{ canStartGame ? '开始战斗' : `等待玩家 (${occupiedSeatsCount}/${currentModeConfig?.players})` }}</span>
                 </button>
             </main>
 
@@ -775,9 +1007,7 @@ onBeforeUnmount(async () => {
                         </div>
                         <div class="stat-row">
                             <span class="stat-label">玩家数量</span>
-                            <span class="stat-value">{{seats.filter(s => s.player).length}}/{{
-                                currentModeConfig?.players
-                            }}</span>
+                            <span class="stat-value">{{ occupiedSeatsCount }}/{{ currentModeConfig?.players }}</span>
                         </div>
                     </div>
                 </div>
@@ -1086,6 +1316,14 @@ onBeforeUnmount(async () => {
     box-shadow: 0 0 20px rgba(88, 101, 242, 0.5);
 }
 
+.mode-chip:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: none !important;
+}
+
 .mode-name {
     font-size: 13px;
     font-weight: 700;
@@ -1265,6 +1503,43 @@ onBeforeUnmount(async () => {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    position: relative;
+}
+
+/* 模式切换遮罩 */
+.switching-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 16px;
+}
+
+.switching-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: #fff;
+    animation: fadeIn 0.3s ease;
+}
+
+.switching-text {
+    font-size: 20px;
+    font-weight: 700;
+    color: #60a5fa;
+}
+
+.switching-hint {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .area-header {
@@ -1293,23 +1568,107 @@ onBeforeUnmount(async () => {
     font-weight: 700;
 }
 
+/* 队伍模式提示 */
+.team-mode-hint {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.team-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.team-a-hint {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.2));
+    border: 2px solid rgba(59, 130, 246, 0.6);
+    color: #93c5fd;
+}
+
+.team-b-hint {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.2));
+    border: 2px solid rgba(239, 68, 68, 0.6);
+    color: #fca5a5;
+}
+
 /* 座位布局 */
 .seats-layout {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
+    gap: 16px;
     flex: 1;
 }
 
+.seats-layout.mode-2v2 {
+    gap: 16px 40px;
+    position: relative;
+}
+
+.seats-layout.mode-2v2::before {
+    content: 'VS';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 36px;
+    font-weight: 900;
+    color: rgba(255, 255, 255, 0.2);
+    z-index: 2;
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+    background: radial-gradient(circle, rgba(15, 23, 42, 0.9) 0%, transparent 70%);
+    padding: 12px 20px;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.seats-layout.mode-2v2::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, 
+        rgba(59, 130, 246, 0.6) 0%, 
+        rgba(255, 255, 255, 0.4) 50%, 
+        rgba(239, 68, 68, 0.6) 100%);
+    transform: translateX(-50%);
+    z-index: 0;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+}
+
 .player-slot {
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(10px);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 16px;
-    padding: 16px;
-    transition: all 0.3s;
+    background: linear-gradient(135deg, rgba(51, 65, 85, 0.8), rgba(30, 41, 59, 0.9));
+    backdrop-filter: blur(20px);
+    border: 3px solid rgba(148, 163, 184, 0.4);
+    border-radius: 20px;
+    padding: 20px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+    z-index: 1;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    min-height: 160px;
+    height: 160px;
+    display: flex;
+    align-items: center;
+}
+
+.player-slot:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    border-color: rgba(148, 163, 184, 0.6);
 }
 
 .player-slot::before {
@@ -1322,25 +1681,71 @@ onBeforeUnmount(async () => {
     background: linear-gradient(135deg, transparent, rgba(255, 255, 255, 0.05));
     opacity: 0;
     transition: opacity 0.3s;
+    pointer-events: none;
 }
 
 .player-slot:hover::before {
     opacity: 1;
 }
 
-.player-slot.filled {
-    border-color: rgba(34, 197, 94, 0.6);
-    background: rgba(34, 197, 94, 0.15);
+.player-slot.team-a {
+    border-color: rgba(59, 130, 246, 0.9) !important;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.25)) !important;
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.5), inset 0 0 40px rgba(59, 130, 246, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }
 
-.player-slot.team-a {
-    border-color: rgba(239, 68, 68, 0.6);
-    background: rgba(239, 68, 68, 0.15);
+.player-slot.team-a:hover {
+    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.6), inset 0 0 50px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+
+.player-slot.team-a::after {
+    content: '队伍 A';
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(59, 130, 246, 1);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9));
+    padding: 5px 10px;
+    border-radius: 12px;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    z-index: 2;
 }
 
 .player-slot.team-b {
-    border-color: rgba(59, 130, 246, 0.6);
-    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(239, 68, 68, 0.9) !important;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.25)) !important;
+    box-shadow: 0 8px 32px rgba(239, 68, 68, 0.5), inset 0 0 40px rgba(239, 68, 68, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.player-slot.team-b:hover {
+    box-shadow: 0 12px 40px rgba(239, 68, 68, 0.6), inset 0 0 50px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+
+.player-slot.team-b::after {
+    content: '队伍 B';
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(239, 68, 68, 1);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9));
+    padding: 5px 10px;
+    border-radius: 12px;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    z-index: 2;
+}
+
+.player-slot.filled:not(.team-a):not(.team-b) {
+    border-color: rgba(34, 197, 94, 0.8);
+    background: rgba(34, 197, 94, 0.2);
+    box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
 }
 
 /* 已填充的座位 */
@@ -1348,65 +1753,180 @@ onBeforeUnmount(async () => {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 20px;
+    z-index: 2;
+    width: 100%;
+}
+
+.player-avatar-wrapper {
+    position: relative;
+    flex-shrink: 0;
 }
 
 .player-img {
-    width: 50px;
-    height: 50px;
-    border-radius: 12px;
+    width: 90px;
+    height: 90px;
+    border-radius: 18px;
     object-fit: cover;
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.1);
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.15);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: block;
+}
+
+.slot-content:hover .player-img {
+    transform: scale(1.05);
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 
 .player-info {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
+    min-width: 0;
 }
 
 .player-username {
-    font-size: 15px;
-    font-weight: 700;
+    font-size: 22px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+.player-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    transition: all 0.3s ease;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(251, 191, 36, 0.8);
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.player-status.ready .status-dot {
+    background: rgba(34, 197, 94, 0.9);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+    animation: none;
+}
+
+.player-status.ready {
+    color: rgba(34, 197, 94, 1);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(0.9);
+    }
 }
 
 .player-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 600;
-    align-self: flex-start;
-}
-
-.player-badge.me {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.5), rgba(34, 197, 94, 0.4));
-    border: 1px solid rgba(34, 197, 94, 0.7);
-}
-
-.btn-remove {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 24px;
-    height: 24px;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 12px;
+    background: linear-gradient(135deg, rgba(88, 101, 242, 0.95), rgba(88, 101, 242, 0.85));
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    backdrop-filter: blur(10px);
+}
+
+.player-badge.badge-me {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(34, 197, 94, 0.85));
+}
+
+.player-badge.badge-ai {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(124, 58, 237, 0.85));
+}
+
+.btn-switch-team {
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(220, 38, 38, 0.8);
-    border: 1px solid rgba(239, 68, 68, 0.8);
-    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.6), rgba(37, 99, 235, 0.5));
+    border: 2px solid rgba(59, 130, 246, 0.8);
+    border-radius: 50%;
     color: #fff;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+    z-index: 3;
+    flex-shrink: 0;
+    margin-left: auto;
+    margin-right: 8px;
 }
 
-.btn-remove:hover {
-    background: rgba(239, 68, 68, 0.5);
-    transform: rotate(90deg);
+.btn-switch-team:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(37, 99, 235, 0.7));
+    transform: scale(1.15) rotate(180deg);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.6);
+}
+
+.btn-switch-team:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-remove {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.5), rgba(220, 38, 38, 0.4));
+    border: 2px solid rgba(239, 68, 68, 0.6);
+    border-radius: 50%;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    z-index: 3;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.btn-remove:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.8), rgba(220, 38, 38, 0.7));
+    transform: scale(1.2) rotate(90deg);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.6);
+}
+
+.btn-remove:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 /* 空座位 */
@@ -1415,26 +1935,66 @@ onBeforeUnmount(async () => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 20px;
-    color: rgba(255, 255, 255, 0.85);
+    gap: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+}
+
+.slot-empty > .iconify {
+    opacity: 0.4;
+    transition: all 0.3s ease;
+}
+
+.slot-empty:hover > .iconify {
+    opacity: 0.7;
+    transform: scale(1.1);
+}
+
+.slot-empty > span {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 0.5px;
 }
 
 .btn-add-ai {
-    padding: 6px 16px;
-    background: rgba(88, 101, 242, 0.5);
-    border: 1px solid rgba(88, 101, 242, 0.7);
-    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 24px;
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    border: 2px solid rgba(139, 92, 246, 0.8);
+    border-radius: 10px;
     color: #fff;
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    letter-spacing: 0.3px;
+    position: relative;
+    z-index: 3;
 }
 
-.btn-add-ai:hover {
-    background: rgba(88, 101, 242, 0.7);
-    box-shadow: 0 0 15px rgba(88, 101, 242, 0.6);
+.btn-add-ai:hover:not(:disabled) {
+    background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(139, 92, 246, 0.5);
+}
+
+.btn-add-ai:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn-add-ai:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: linear-gradient(135deg, #64748b, #475569);
+    border-color: rgba(100, 116, 139, 0.6);
 }
 
 /* 开始按钮 */
@@ -1520,6 +2080,29 @@ onBeforeUnmount(async () => {
     border-radius: 8px;
     font-size: 12px;
     line-height: 1.4;
+}
+
+/* ===== 图标样式 ===== */
+.iconify, svg.iconify {
+    display: inline-block;
+    vertical-align: middle;
+    color: inherit;
+    fill: currentColor;
+}
+
+button .iconify,
+button svg.iconify {
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+.btn-back .iconify,
+.btn-rules .iconify,
+.btn-invite .iconify,
+.btn-add-ai .iconify,
+.btn-start-game .iconify,
+.btn-remove .iconify {
+    color: inherit;
 }
 
 /* ===== 响应式 ===== */

@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from
 import { useRouter } from 'vue-router'
 import request from '../config/api'
 import { useUserStore } from '../config/user'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 
@@ -113,11 +114,11 @@ const renderHcaptcha = () => {
         },
         'expired-callback': () => {
           hcaptchaToken.value = ''
-          alert('验证已过期，请重新提交')
+          ElMessage.warning('验证已过期，请重新提交')
         },
         'error-callback': () => {
           hcaptchaToken.value = ''
-          alert('验证出错，请重试')
+          ElMessage.error('验证出错，请重试')
         }
       })
     } catch (e) {
@@ -342,11 +343,11 @@ const validateForgotPassword = () => {
 // 发送验证码
 const sendVerificationCode = async () => {
   if (!registerForm.email.trim()) {
-    alert('请先输入QQ邮箱')
+    ElMessage.warning('请先输入QQ邮箱')
     return
   }
   if (!validateEmail(registerForm.email)) {
-    alert('请输入有效的QQ邮箱地址')
+    ElMessage.warning('请输入有效的QQ邮箱地址')
     return
   }
   isCodeSent.value = true
@@ -365,27 +366,27 @@ const sendVerificationCode = async () => {
       timeout: 30000
     })
     if (response.data.success) {
-      alert('验证码已发送到您的邮箱，请注意查收')
+      ElMessage.success('验证码已发送到您的邮箱，请注意查收')
     } else {
       isCodeSent.value = false
       countdown.value = 0
       if (countdownTimer.value) clearInterval(countdownTimer.value)
-      alert(response.data.message || '发送验证码失败')
+      ElMessage.error(response.data.message || '发送验证码失败')
     }
   } catch (error) {
     console.error('发送验证码失败:', error)
-    alert('发送验证码失败，请稍后重试')
+    ElMessage.error('发送验证码失败，请稍后重试')
   }
 }
 
 // 发送忘记密码验证码
 const sendForgotPasswordCode = async () => {
   if (!forgotPasswordForm.email.trim()) {
-    alert('请先输入QQ邮箱')
+    ElMessage.warning('请先输入QQ邮箱')
     return
   }
   if (!validateEmail(forgotPasswordForm.email)) {
-    alert('请输入有效的QQ邮箱地址')
+    ElMessage.warning('请输入有效的QQ邮箱地址')
     return
   }
   isForgotCodeSent.value = true
@@ -404,16 +405,16 @@ const sendForgotPasswordCode = async () => {
       timeout: 30000
     })
     if (response.data.success) {
-      alert('验证码已发送到您的邮箱，请注意查收')
+      ElMessage.success('验证码已发送到您的邮箱，请注意查收')
     } else {
       isForgotCodeSent.value = false
       forgotCountdown.value = 0
       if (forgotCountdownTimer.value) clearInterval(forgotCountdownTimer.value)
-      alert(response.data.message || '发送验证码失败')
+      ElMessage.error(response.data.message || '发送验证码失败')
     }
   } catch (error) {
     console.error('发送验证码失败:', error)
-    alert('发送验证码失败,请稍后重试')
+    ElMessage.error('发送验证码失败,请稍后重试')
   }
 }
 
@@ -434,15 +435,15 @@ const handleLogin = async () => {
       })
       router.push('/user')
     } else {
-      alert(response.data.message || '登录失败')
+      ElMessage.error(response.data.message || '登录失败')
     }
   } catch (error) {
     console.error('登录失败:', error)
     // 处理服务器返回的错误信息
     if (error.response && error.response.data) {
-      alert(error.response.data.message || '登录失败,请稍后重试')
+      ElMessage.error(error.response.data.message || '登录失败,请稍后重试')
     } else {
-      alert('网络错误,请稍后重试')
+      ElMessage.error('网络错误,请稍后重试')
     }
   } finally {
     isLoading.value = false
@@ -455,7 +456,7 @@ const handleRegister = async () => {
 
   // 检查 hCaptcha 是否已加载
   if (!hcaptchaLoaded.value || !globalThis.hcaptcha || hcaptchaWidgetId.value === null) {
-    alert('人机验证尚未加载完成，请稍后重试')
+    ElMessage.warning('人机验证尚未加载完成，请稍后重试')
     return
   }
 
@@ -467,14 +468,14 @@ const handleRegister = async () => {
     globalThis.hcaptcha.execute(hcaptchaWidgetId.value)
   } catch (e) {
     console.error('执行 hCaptcha 验证失败:', e)
-    alert('启动人机验证失败，请刷新页面重试')
+    ElMessage.error('启动人机验证失败，请刷新页面重试')
   }
 }
 
 // 实际提交注册（在验证成功后调用）
 const submitRegister = async () => {
   if (!hcaptchaToken.value) {
-    alert('人机验证失败，请重试')
+    ElMessage.warning('人机验证失败，请重试')
     return
   }
 
@@ -491,19 +492,19 @@ const submitRegister = async () => {
 
     if (response.data.success) {
       // 注册成功，不自动登录，跳转到登录表单
-      alert('注册成功!请使用新账号登录')
+      ElMessage.success('注册成功!请使用新账号登录')
       switchMode('login')
       resetForms()
     } else {
-      alert(response.data.message || '注册失败')
+      ElMessage.error(response.data.message || '注册失败')
       resetHcaptcha()
     }
   } catch (error) {
     console.error('注册失败:', error)
     if (error.response && error.response.data) {
-      alert(error.response.data.message || '注册失败，请稍后重试')
+      ElMessage.error(error.response.data.message || '注册失败，请稍后重试')
     } else {
-      alert('网络错误，请稍后重试')
+      ElMessage.error('网络错误，请稍后重试')
     }
     resetHcaptcha()
   } finally {
@@ -526,18 +527,18 @@ const handleForgotPassword = async () => {
 
     if (response.data.success) {
       // 密码重置成功，跳转到登录表单
-      alert('密码重置成功！请使用新密码登录')
+      ElMessage.success('密码重置成功！请使用新密码登录')
       switchMode('login')
       resetForms()
     } else {
-      alert(response.data.message || '密码重置失败')
+      ElMessage.error(response.data.message || '密码重置失败')
     }
   } catch (error) {
     console.error('密码重置失败:', error)
     if (error.response && error.response.data) {
-      alert(error.response.data.message || '密码重置失败，请稍后重试')
+      ElMessage.error(error.response.data.message || '密码重置失败，请稍后重试')
     } else {
-      alert('网络错误，请稍后重试')
+      ElMessage.error('网络错误，请稍后重试')
     }
   } finally {
     isLoading.value = false

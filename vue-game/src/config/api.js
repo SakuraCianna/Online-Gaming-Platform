@@ -36,8 +36,6 @@ const addInterceptors = (instance) => {
     error => {
       // Token过期或未授权（401）
       if (error.response?.status === 401) {
-        console.error('[API] Token过期或未授权，跳转登录页')
-
         // 防止重复提示
         if (!isTokenExpiredMessageShown) {
           isTokenExpiredMessageShown = true

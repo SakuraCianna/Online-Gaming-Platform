@@ -5,6 +5,8 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -47,5 +49,17 @@ public class JwtUtil {
     public static Long getUserIdFromToken(String token) {
         Claims claims = verifyToken(token);
         return Long.valueOf(claims.getSubject());
+    }
+
+    /**
+     * 从 SecurityContext 中获取当前登录用户的 ID
+     * 供 Service 和 Controller 调用，避免从请求参数中获取 userId
+     */
+    public static Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Long) {
+            return (Long) authentication.getPrincipal();
+        }
+        throw new RuntimeException("未找到当前登录用户信息");
     }
 }

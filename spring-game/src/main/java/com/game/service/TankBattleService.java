@@ -40,10 +40,10 @@ public class TankBattleService {
     }
 
     // 开始游戏
-    public Map<String, Object> startGame(String roomCode, Map<String, Object> request) {
+    public Map<String, Object> startGame(String roomCode, Map<String, Object> request, Long currentUserId) {
         Map<String, Object> result = new HashMap<>();
         try {
-            long userId = Long.parseLong(request.get("userId").toString());
+            long userId = currentUserId; // 使用当前登录用户
             int mode = Integer.parseInt(request.get("mode").toString());
             String map = request.get("map").toString();
 

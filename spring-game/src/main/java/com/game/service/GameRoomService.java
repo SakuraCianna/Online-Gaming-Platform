@@ -8,6 +8,7 @@ import com.game.entity.User;
 import com.game.exception.BusinessException;
 import com.game.mapper.GameRoomMapper;
 import com.game.mapper.UserMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -15,9 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Transactional
+@Slf4j
 public class GameRoomService {
     private final GameRoomMapper gameRoomMapper;
     private final UserMapper userMapper;
@@ -45,11 +48,10 @@ public class GameRoomService {
         return result;
     }
 
-    public Map<String, Object> createRoom(Map<String, Object> request) {
+    public Map<String, Object> createRoom(Map<String, Object> request, Long currentUserId) {
         String roomCode = (String) request.get("roomCode");
         String gameName = (String) request.get("gameName");
         Integer status = request.get("status") != null ? ((Number) request.get("status")).intValue() : 0;
-        Long creatorId = request.get("creatorId") != null ? Long.valueOf(request.get("creatorId").toString()) : null;
         Integer isPrivate = request.get("isPrivate") != null ? ((Number) request.get("isPrivate")).intValue() : 0;
 
         // 单机游戏不允许创建房间
@@ -61,7 +63,7 @@ public class GameRoomService {
         room.setRoomCode(roomCode);
         room.setGameName(gameName);
         room.setStatus(status);
-        room.setCreatorId(creatorId);
+        room.setCreatorId(currentUserId);
         room.setIsPrivate(isPrivate);
 
         // 根据游戏类型设置游戏配置（仅多人游戏）
@@ -116,7 +118,7 @@ public class GameRoomService {
         // 构造房主的 RoomPlayer 对象
         RoomPlayer player = new RoomPlayer();
         player.setRoomId(null);
-        player.setUserId(creatorId);
+        player.setUserId(currentUserId);
         player.setIsAi(0);
         player.setAiType(null);
         player.setAiConfig(null);
@@ -136,7 +138,7 @@ public class GameRoomService {
         // 存储到Redis（房间玩家信息，Hash结构），直接存对象
         String playerKey = redisKeyManager.buildPlayerKey(roomCode);
         try {
-            redisTemplate.opsForHash().put(playerKey, String.valueOf(creatorId), player);
+            redisTemplate.opsForHash().put(playerKey, String.valueOf(currentUserId), player);
             // 设置玩家信息初始 TTL 为 24 小时
             redisKeyManager.setPlayerInitialTTL(roomCode);
         } catch (Exception e) {
@@ -152,9 +154,9 @@ public class GameRoomService {
         return result;
     }
 
-    public Map<String, Object> leaveRoom(Map<String, Object> request) {
+    public Map<String, Object> leaveRoom(Map<String, Object> request, Long currentUserId) {
         String roomCode = (String) request.get("roomCode");
-        long userId = Long.parseLong(request.get("userId").toString());
+        long userId = currentUserId; // 使用当前登录用户
         String username = (String) request.getOrDefault("username", "某玩家");
 
         String roomKey = redisKeyManager.buildRoomKey(roomCode);
@@ -203,8 +205,8 @@ public class GameRoomService {
         return result;
     }
 
-    public Map<String, Object> inviteToRoom(Map<String, Object> request) {
-        long userId = Long.parseLong(request.get("userId").toString());
+    public Map<String, Object> inviteToRoom(Map<String, Object> request, Long currentUserId) {
+        long userId = currentUserId; // 使用当前登录用户作为邀请者
         long friendId = Long.parseLong(request.get("friendId").toString());
         String roomCode = (String) request.get("roomCode");
         String gameName = (String) request.get("gameName");
@@ -256,8 +258,8 @@ public class GameRoomService {
         return result;
     }
 
-    public Map<String, Object> acceptInvite(Map<String, Object> request) {
-        long userId = Long.parseLong(request.get("userId").toString());
+    public Map<String, Object> acceptInvite(Map<String, Object> request, Long currentUserId) {
+        long userId = currentUserId; // 使用当前登录用户
         String roomCode = (String) request.get("roomCode");
         long inviterId = Long.parseLong(request.get("inviterId").toString());
 
@@ -378,8 +380,8 @@ public class GameRoomService {
         return result;
     }
 
-    public Map<String, Object> rejectInvite(Map<String, Object> request) {
-        long userId = Long.parseLong(request.get("userId").toString());
+    public Map<String, Object> rejectInvite(Map<String, Object> request, Long currentUserId) {
+        long userId = currentUserId; // 使用当前登录用户
         String roomCode = (String) request.get("roomCode");
         long inviterId = Long.parseLong(request.get("inviterId").toString());
 
@@ -438,9 +440,9 @@ public class GameRoomService {
 
                     // 判断是否为AI玩家
                     if (player.getIsAi() == 1) {
-                        // AI玩家
                         long aiUserId = player.getUserId();
-                        String aiDisplayName = aiUserId == 0 ? "AI Player" : "AI Player #" + Math.abs(aiUserId);
+                        int aiNumber = (int) (Math.abs(aiUserId) + 1);
+                        String aiDisplayName = "AI Player #" + aiNumber;
 
                         playerInfo.put("userId", aiUserId);
                         playerInfo.put("username", aiDisplayName);
@@ -485,11 +487,14 @@ public class GameRoomService {
         return result;
     }
 
-    public Map<String, Object> kickPlayer(Map<String, Object> request) {
+    public Map<String, Object> kickPlayer(Map<String, Object> request, Long currentUserId) {
         String roomCode = (String) request.get("roomCode");
-        long kickerId = Long.parseLong(request.get("kickerId").toString());
+        long kickerId = currentUserId; // 使用当前登录用户作为踢人者
         String kickerName = (String) request.getOrDefault("kickerName", "房主");
-        long kickedUserId = Long.parseLong(request.get("kickedUserId").toString());
+        
+        // 支持字符串类型的AI ID（如 "ai_1234567890"）
+        Object kickedUserIdObj = request.get("kickedUserId");
+        String kickedUserIdStr = kickedUserIdObj != null ? kickedUserIdObj.toString() : "0";
         String kickedUserName = (String) request.getOrDefault("kickedUserName", "玩家");
 
         Map<String, Object> result = new HashMap<>();
@@ -512,9 +517,9 @@ public class GameRoomService {
                 return result;
             }
 
-            // 从 Redis 中删除被踢玩家的信息
+            // 从 Redis 中删除被踢玩家的信息（使用字符串作为key）
             String playerKey = redisKeyManager.buildPlayerKey(roomCode);
-            Long deleted = redisTemplate.opsForHash().delete(playerKey, String.valueOf(kickedUserId));
+            Long deleted = redisTemplate.opsForHash().delete(playerKey, kickedUserIdStr);
 
             if (deleted == 0) {
                 result.put("success", false);
@@ -530,7 +535,12 @@ public class GameRoomService {
             kickMessage.put("type", "kicked");
             kickMessage.put("kickerId", kickerId);
             kickMessage.put("kickerName", kickerName);
-            kickMessage.put("kickedUserId", kickedUserId);
+            // 尝试转换为long，如果失败则使用字符串（用于AI玩家）
+            try {
+                kickMessage.put("kickedUserId", Long.parseLong(kickedUserIdStr));
+            } catch (NumberFormatException e) {
+                kickMessage.put("kickedUserId", kickedUserIdStr);
+            }
             kickMessage.put("kickedUserName", kickedUserName);
             kickMessage.put("message", kickedUserName + " 已被移出房间");
 
@@ -581,29 +591,69 @@ public class GameRoomService {
         return aiKeys;
     }
 
+    // 生成AI显示名称（根据当前房间已有AI数量，找到第一个未使用的编号）
+    private String generateAIDisplayName(Map<Object, Object> playersData) {
+        Set<Integer> usedNumbers = new HashSet<>();
+
+        // 收集所有已使用的AI编号
+        for (Object value : playersData.values()) {
+            try {
+                RoomPlayer player = objectMapper.convertValue(value, RoomPlayer.class);
+                if (player.getIsAi() == 1 && player.getUserId() <= 0) {
+                    // 从负数ID推算编号：0->1, -1->2, -2->3...
+                    int number = (int) (Math.abs(player.getUserId()) + 1);
+                    usedNumbers.add(number);
+                }
+            } catch (Exception e) {
+                // 忽略解析错误
+            }
+        }
+
+        // 找到第一个未使用的编号（从1开始）
+        int nextNumber = 1;
+        while (usedNumbers.contains(nextNumber)) {
+            nextNumber++;
+        }
+
+        return "AI Player #" + nextNumber;
+    }
+
     // 查找下一个可用的AI ID（0, -1, -2, -3...）
     private long findNextAvailableAIId(String playerKey) {
         Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
-        long nextId = 0;
+        Set<Long> usedIds = new HashSet<>();
 
+        // 收集所有已使用的AI ID
         for (Object key : playersData.keySet()) {
             try {
                 long userId = Long.parseLong(key.toString());
-                if (userId <= nextId) {
-                    nextId = userId - 1;
+                if (userId <= 0) {  // AI ID应该是0或负数
+                    usedIds.add(userId);
                 }
             } catch (Exception e) {
-                // 忽略无效的key
+                // 忽略无效的key（如字符串型AI ID）
             }
+        }
+
+        // 从0开始递减查找第一个未使用的ID
+        long nextId = 0;
+        while (usedIds.contains(nextId)) {
+            nextId--;
         }
 
         return nextId;
     }
 
-    public Map<String, Object> addAI(Map<String, Object> request) {
+    public Map<String, Object> addAI(Map<String, Object> request, Long currentUserId) {
         String roomCode = (String) request.get("roomCode");
-        long userId = Long.parseLong(request.get("userId").toString());
+        long userId = currentUserId; // 使用当前登录用户
         String aiDifficulty = (String) request.getOrDefault("aiDifficulty", "medium");
+        
+        // 获取前端传递的目标队伍和座位索引
+        Integer targetTeamId = request.get("targetTeamId") != null ? 
+            ((Number) request.get("targetTeamId")).intValue() : null;
+        Integer targetSeatIndex = request.get("targetSeatIndex") != null ? 
+            ((Number) request.get("targetSeatIndex")).intValue() : null;
 
         Map<String, Object> result = new HashMap<>();
 
@@ -635,6 +685,12 @@ public class GameRoomService {
                 return result;
             }
 
+            // 获取当前房间的所有玩家数据（用于队伍分配和AI名称生成）
+            Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
+
+            // 生成AI显示名称（在添加到Redis之前）
+            String aiDisplayName = generateAIDisplayName(playersData);
+
             // 查找下一个可用的AI ID（支持多个AI）
             long aiUserId = findNextAvailableAIId(playerKey);
 
@@ -646,11 +702,28 @@ public class GameRoomService {
             aiPlayer.setAiType(aiDifficulty); // 存储AI难度
             aiPlayer.setAiConfig(null);
 
-            // 根据队伍模式分配队伍
+            // 根据队伍模式和前端指定的目标位置分配队伍
             int teamMode = room.getTeamMode() != null ? room.getTeamMode() : 0;
-            if (teamMode == 1) {
-                // 1v1模式：AI在队伍2
-                aiPlayer.setTeamId(2);
+            if (targetTeamId != null && targetTeamId > 0) {
+                // 如果前端指定了目标队伍，直接使用
+                aiPlayer.setTeamId(targetTeamId);
+            } else if (teamMode == 1) {
+                // 否则使用原有的平衡逻辑
+                int team1Count = 0;
+                int team2Count = 0;
+                for (Object playerObj : playersData.values()) {
+                    try {
+                        RoomPlayer player = objectMapper.convertValue(playerObj, RoomPlayer.class);
+                        if (player.getTeamId() != null) {
+                            if (player.getTeamId() == 1) team1Count++;
+                            else if (player.getTeamId() == 2) team2Count++;
+                        }
+                    } catch (Exception e) {
+                        // 忽略转换错误
+                    }
+                }
+                // 分配到人数较少的队伍，如果人数相同则分配到队伍1
+                aiPlayer.setTeamId(team1Count <= team2Count ? 1 : 2);
             } else {
                 // 无队伍模式
                 aiPlayer.setTeamId(0);
@@ -658,7 +731,8 @@ public class GameRoomService {
 
             aiPlayer.setIsReady(1); // AI自动准备
             aiPlayer.setPlayerRole("ai"); // AI角色
-            aiPlayer.setPosition(playerCount.intValue() + 1);
+            // 使用目标座位索引作为position（如果提供），否则使用玩家计数
+            aiPlayer.setPosition(targetSeatIndex != null ? targetSeatIndex + 1 : playerCount.intValue() + 1);
 
             aiPlayer.setKill(0);
             aiPlayer.setDeath(0);
@@ -671,9 +745,6 @@ public class GameRoomService {
 
             // 刷新所有相关 Key 的 TTL
             redisKeyManager.refreshRoomTTL(roomCode);
-
-            // 生成AI显示名称
-            String aiDisplayName = aiUserId == 0 ? "AI Player" : "AI Player #" + Math.abs(aiUserId);
 
             // 推送AI加入消息到房间
             Map<String, Object> joinMessage = new HashMap<>();
@@ -703,16 +774,25 @@ public class GameRoomService {
     }
 
     /**
-     * 切换玩家队伍
+     * 切换队伍（真人玩家只能切换到空位）
      */
-    public Map<String, Object> switchTeam(Map<String, Object> request) {
+    public Map<String, Object> switchTeam(Map<String, Object> request, Long currentUserId) {
         String roomCode = (String) request.get("roomCode");
-        long userId = Long.parseLong(request.get("userId").toString());
-        int targetTeamId = Integer.parseInt(request.get("teamId").toString());
+        long userId = currentUserId; // 使用当前登录用户
+        int targetTeamId = Integer.parseInt(request.get("targetTeamId").toString());
 
         Map<String, Object> result = new HashMap<>();
+        String lockKey = "lock:room:switchTeam:" + roomCode + ":" + userId;
 
         try {
+            // 获取分布式锁，防止并发切换
+            Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "locked", 3, TimeUnit.SECONDS);
+            if (lockAcquired == null || !lockAcquired) {
+                result.put("success", false);
+                result.put("message", "操作过于频繁，请稍候再试");
+                return result;
+            }
+
             // 检查房间是否存在
             String roomKey = "room:code:" + roomCode;
             Object roomObj = redisTemplate.opsForValue().get(roomKey);
@@ -725,7 +805,7 @@ public class GameRoomService {
 
             // 只有2v2模式才允许切换队伍
             int teamMode = room.getTeamMode() != null ? room.getTeamMode() : 0;
-            if (teamMode != 2) {
+            if (teamMode != 1) {
                 result.put("success", false);
                 result.put("message", "当前模式不支持切换队伍");
                 return result;
@@ -741,6 +821,13 @@ public class GameRoomService {
             }
 
             RoomPlayer player = objectMapper.convertValue(playerObj, RoomPlayer.class);
+            
+            // 检查是否尝试切换到当前队伍
+            if (player.getTeamId() != null && player.getTeamId() == targetTeamId) {
+                result.put("success", false);
+                result.put("message", "您已经在这个队伍中了");
+                return result;
+            }
 
             // 检查目标队伍人数
             Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
@@ -756,10 +843,10 @@ public class GameRoomService {
                 }
             }
 
-            // 2v2模式每队最多2人
+            // 2v2模式每队最多2人，必须有空位
             if (targetTeamCount >= 2) {
                 result.put("success", false);
-                result.put("message", "目标队伍已满(2/2)");
+                result.put("message", "目标队伍没有空位");
                 return result;
             }
 
@@ -780,7 +867,7 @@ public class GameRoomService {
             switchMessage.put("userId", userId);
             switchMessage.put("username", username);
             switchMessage.put("teamId", targetTeamId);
-            switchMessage.put("message", username + " 加入了队伍" + (targetTeamId == 1 ? "A" : "B"));
+            switchMessage.put("message", username + " 切换到了队伍" + (targetTeamId == 1 ? "A" : "B"));
 
             messagingTemplate.convertAndSend("/topic/room/" + roomCode, switchMessage);
 
@@ -791,6 +878,10 @@ public class GameRoomService {
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", "切换队伍失败: " + e.getMessage());
+            log.error("切换队伍失败", e);
+        } finally {
+            // 释放锁
+            redisTemplate.delete(lockKey);
         }
 
         return result;
@@ -799,9 +890,9 @@ public class GameRoomService {
     /**
      * 更新房间游戏模式和teamMode
      */
-    public Map<String, Object> updateRoomMode(Map<String, Object> request) {
+    public Map<String, Object> updateRoomMode(Map<String, Object> request, Long currentUserId) {
         String roomCode = (String) request.get("roomCode");
-        long userId = Long.parseLong(request.get("userId").toString());
+        long userId = currentUserId; // 使用当前登录用户
         String mode = (String) request.get("mode"); // "1v1v1v1" or "2v2"
 
         Map<String, Object> result = new HashMap<>();
@@ -836,10 +927,10 @@ public class GameRoomService {
             redisTemplate.opsForValue().set(roomKey, room);
 
             // 如果切换到2v2模式，自动分配玩家队伍
+            String playerKey = redisKeyManager.buildPlayerKey(roomCode);
+            Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
             if (teamMode == 2) {
-                String playerKey = redisKeyManager.buildPlayerKey(roomCode);
-                Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
-                
+
                 int assignedTeam = 1; // 从队伍1开始分配
                 
                 for (Map.Entry<Object, Object> entry : playersData.entrySet()) {
@@ -862,9 +953,7 @@ public class GameRoomService {
                 }
             } else {
                 // 切换到混战模式，清空所有队伍分配
-                String playerKey = redisKeyManager.buildPlayerKey(roomCode);
-                Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
-                
+
                 for (Map.Entry<Object, Object> entry : playersData.entrySet()) {
                     try {
                         RoomPlayer player = objectMapper.convertValue(entry.getValue(), RoomPlayer.class);
@@ -895,6 +984,103 @@ public class GameRoomService {
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", "更新模式失败: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * 智能模式切换：随机分配队伍/座位
+     */
+    public Map<String, Object> switchMode(Map<String, Object> request, Long currentUserId) {
+        String roomCode = (String) request.get("roomCode");
+        long userId = currentUserId; // 使用当前登录用户
+        String newMode = (String) request.get("mode"); // "1v1v1v1" or "2v2"
+        
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            // 检查房间是否存在
+            String roomKey = "room:code:" + roomCode;
+            Object roomObj = redisTemplate.opsForValue().get(roomKey);
+            if (roomObj == null) {
+                result.put("success", false);
+                result.put("message", "房间不存在");
+                return result;
+            }
+            GameRoom room = objectMapper.convertValue(roomObj, GameRoom.class);
+
+            // 验证是否为房主
+            if (room.getCreatorId() != userId) {
+                result.put("success", false);
+                result.put("message", "只有房主可以切换模式");
+                return result;
+            }
+
+            // 更新房间模式
+            int teamMode = "2v2".equals(newMode) ? 1 : 0;
+            room.setTeamMode(teamMode);
+            redisTemplate.opsForValue().set(roomKey, room);
+
+            // 获取所有玩家
+            String playerKey = redisKeyManager.buildPlayerKey(roomCode);
+            Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
+            
+            if (!playersData.isEmpty()) {
+                List<Map.Entry<Object, Object>> playerEntries = new ArrayList<>(playersData.entrySet());
+
+                Collections.shuffle(playerEntries); // 随机打乱顺序
+                if (teamMode == 1) {
+                    // 切换到2v2模式：随机分配队伍
+
+                    for (int i = 0; i < playerEntries.size(); i++) {
+                        Map.Entry<Object, Object> entry = playerEntries.get(i);
+                        try {
+                            RoomPlayer player = objectMapper.convertValue(entry.getValue(), RoomPlayer.class);
+                            // 随机分配：前一半队伍1，后一半队伍2
+                            player.setTeamId(i < playerEntries.size() / 2.0 ? 1 : 2);
+                            player.setPosition(i + 1);
+                            redisTemplate.opsForHash().put(playerKey, entry.getKey().toString(), player);
+                        } catch (Exception e) {
+                            // 忽略解析错误
+                        }
+                    }
+                } else {
+                    // 切换到混战模式：清空队伍，随机分配座位
+
+                    for (int i = 0; i < playerEntries.size(); i++) {
+                        Map.Entry<Object, Object> entry = playerEntries.get(i);
+                        try {
+                            RoomPlayer player = objectMapper.convertValue(entry.getValue(), RoomPlayer.class);
+                            player.setTeamId(0); // 无队伍
+                            player.setPosition(i + 1); // 重新分配座位位置
+                            redisTemplate.opsForHash().put(playerKey, entry.getKey().toString(), player);
+                        } catch (Exception e) {
+                            // 忽略解析错误
+                        }
+                    }
+                }
+            }
+
+            // 刷新TTL
+            redisKeyManager.refreshRoomTTL(roomCode);
+
+            // 推送模式切换完成消息
+            Map<String, Object> switchedMessage = new HashMap<>();
+            switchedMessage.put("type", "modeSwitched");
+            switchedMessage.put("mode", newMode);
+            switchedMessage.put("teamMode", teamMode);
+            switchedMessage.put("message", teamMode == 1 ? "已切换到团队模式，队伍已随机分配" : "已切换到混战模式，座位已重新分配");
+
+            messagingTemplate.convertAndSend("/topic/room/" + roomCode, switchedMessage);
+
+            result.put("success", true);
+            result.put("message", "模式切换成功");
+
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "切换模式失败: " + e.getMessage());
+            log.error(String.valueOf(e));
         }
 
         return result;

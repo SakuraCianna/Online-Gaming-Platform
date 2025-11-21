@@ -16,6 +16,12 @@ export const useUserStore = defineStore('user', {
     setAuth({ token, user }) {
       this.token = token || ''
       this.user = user || null
+      // 同步更新 localStorage.token（api.js 依赖此 key）
+      if (token) {
+        localStorage.setItem('token', token)
+      } else {
+        localStorage.removeItem('token')
+      }
     },
     setUser(user) {
       this.user = user || null
@@ -30,6 +36,8 @@ export const useUserStore = defineStore('user', {
       this.friends = []
       this.friendsTotal = 0
       this.stopPresence()
+      // 同步清除 localStorage.token
+      localStorage.removeItem('token')
     },
     setFriends(friendsList, total = 0) {
       this.friends = (friendsList || []).map(f => ({
@@ -53,7 +61,7 @@ export const useUserStore = defineStore('user', {
     async heartbeatOnce() {
       if (!this.user?.id) return
       try {
-        await request.post('/user/state/heartbeat', null, { params: { userId: this.user.id } })
+        await request.post('/user/state/heartbeat')
       } catch {
         // 心跳失败静默处理
       }
@@ -72,20 +80,20 @@ export const useUserStore = defineStore('user', {
     // 游戏状态相关
     async setCurrentGame(game) {
       if (!this.user?.id) return
-      await request.post('/user/state/game/start', null, { params: { userId: this.user.id, game } })
+      await request.post('/user/state/game/start', null, { params: { game } })
     },
     async clearCurrentGame() {
       if (!this.user?.id) return
-      await request.post('/user/state/game/stop', null, { params: { userId: this.user.id } })
+      await request.post('/user/state/game/stop')
     },
     // 在线/离线标记
     async markOnline() {
       if (!this.user?.id) return
-      await request.post('/user/state/online', null, { params: { userId: this.user.id } })
+      await request.post('/user/state/online')
     },
     async markOffline() {
       if (!this.user?.id) return
-      await request.post('/user/state/offline', null, { params: { userId: this.user.id } })
+      await request.post('/user/state/offline')
     },
   },
   persist: true

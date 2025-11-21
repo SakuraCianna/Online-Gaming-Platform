@@ -591,8 +591,19 @@ async function saveAndExit() {
 }
 
 // 不保存并退出
-function exitWithoutSave() {
+async function exitWithoutSave() {
   stopTimer()
+  
+  // 如果是继续的游戏（有 inProgressGame），需要删除数据库记录
+  if (inProgressGame.value) {
+    try {
+      await request.delete('/minesweeper/delete', { params: { id: inProgressGame.value.id } })
+      inProgressGame.value = null
+    } catch (e) {
+      ElMessage.error('删除游戏记录失败')
+    }
+  }
+  
   router.push('/user')
 }
 
