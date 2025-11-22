@@ -3,6 +3,7 @@ package com.game.controller;
 import com.game.exception.BusinessException;
 import com.game.service.GomokuService;
 import com.game.vo.PointVO;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -14,13 +15,10 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/gomoku")
+@RequiredArgsConstructor
 public class GomokuController {
     private final GomokuService gomokuService;
     private final SimpMessagingTemplate messagingTemplate;
-    public GomokuController(GomokuService gomokuService, SimpMessagingTemplate messagingTemplate) {
-        this.gomokuService = gomokuService;
-        this.messagingTemplate = messagingTemplate;
-    }
 
     @GetMapping("/{roomCode}/swapColor")
     public ResponseEntity<Map<String, Object>> swapColor(

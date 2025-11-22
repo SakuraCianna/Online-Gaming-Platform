@@ -7,6 +7,7 @@ import com.game.mapper.UserMapper;
 import com.game.service.UserService;
 import com.game.vo.UserVO;
 import io.jsonwebtoken.Claims;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,19 +16,12 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/user")
+@RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
     private final UserMapper userMapper;
     private final FriendMapper friendMapper;
     private final HCaptchaUtil hCaptchaUtil;
-
-    public UserController(UserService userService, UserMapper userMapper,
-                          FriendMapper friendMapper, HCaptchaUtil hCaptchaUtil) {
-        this.userService = userService;
-        this.userMapper = userMapper;
-        this.friendMapper = friendMapper;
-        this.hCaptchaUtil = hCaptchaUtil;
-    }
 
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, Object> request) {

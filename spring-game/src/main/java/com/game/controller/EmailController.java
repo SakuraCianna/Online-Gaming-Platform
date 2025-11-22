@@ -1,6 +1,7 @@
 package com.game.controller;
 
 import com.game.service.EmailService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -11,12 +12,9 @@ import java.util.Random;
 
 @RestController
 @RequestMapping("/api/email")
+@RequiredArgsConstructor
 public class EmailController {
     private final EmailService emailService;
-
-    public EmailController(EmailService emailService) {
-        this.emailService = emailService;
-    }
 
     @PostMapping("/sendCode")
     public ResponseEntity<Map<String, Object>> sendCode(@RequestBody Map<String, Object> request) {

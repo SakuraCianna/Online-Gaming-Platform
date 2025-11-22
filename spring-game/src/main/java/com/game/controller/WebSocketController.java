@@ -3,6 +3,7 @@ package com.game.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.entity.GameRoom;
 import com.game.entity.Gomoku;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -14,15 +15,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Controller
+@RequiredArgsConstructor
 public class WebSocketController {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
-
-    public WebSocketController(RedisTemplate<String, Object> redisTemplate, ObjectMapper objectMapper) {
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
-    }
 
     /**
      * 处理玩家退出/认输消息

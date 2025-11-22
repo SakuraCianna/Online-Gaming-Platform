@@ -4,6 +4,7 @@ import com.game.config.RabbitMQConfig;
 import com.game.dto.GameRecordMessageDTO;
 import com.game.exception.BusinessException;
 import com.game.mapper.Game2048Mapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
@@ -17,14 +18,10 @@ import java.util.Map;
 @Slf4j
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class Game2048Service {
     private final Game2048Mapper game2048Mapper;
     private final RabbitTemplate rabbitTemplate;
-
-    public Game2048Service(Game2048Mapper game2048Mapper, RabbitTemplate rabbitTemplate) {
-        this.game2048Mapper = game2048Mapper;
-        this.rabbitTemplate = rabbitTemplate;
-    }
 
     public Map<String, Object> saveData(Map<String, Object> request) {
         log.info("开始保存2048游戏数据: userId={}", request.get("user_id"));

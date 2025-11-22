@@ -1,6 +1,7 @@
 package com.game.controller;
 
 import com.game.service.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/record")
+@RequiredArgsConstructor
 public class GameRecordController {
 
     private final GameRecordService gameRecordService;
@@ -23,20 +25,6 @@ public class GameRecordController {
     // 缓存Key前缀
     private static final String RECORDS_CACHE_PREFIX = "game:";
     private static final long RECORDS_CACHE_TTL = 5; // 记录缓存5分钟
-
-    public GameRecordController(GameRecordService gameRecordService,
-                                Game2048Service game2048Service,
-                                MinesweeperService minesweeperService,
-                                GomokuService gomokuService,
-                                TankBattleService tankBattleService,
-                                RedisTemplate<String, Object> redisTemplate) {
-        this.gameRecordService = gameRecordService;
-        this.game2048Service = game2048Service;
-        this.minesweeperService = minesweeperService;
-        this.gomokuService = gomokuService;
-        this.tankBattleService = tankBattleService;
-        this.redisTemplate = redisTemplate;
-    }
 
     // 获取用户游戏统计数据
     @GetMapping("/statistics")

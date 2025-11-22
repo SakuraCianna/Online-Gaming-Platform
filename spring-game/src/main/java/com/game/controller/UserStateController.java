@@ -2,19 +2,17 @@ package com.game.controller;
 
 import com.game.component.JwtUtil;
 import com.game.service.UserStateService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/user/state")
+@RequiredArgsConstructor
 public class UserStateController {
 
     private final UserStateService userStateService;
-
-    public UserStateController(UserStateService userStateService) {
-        this.userStateService = userStateService;
-    }
 
     @PostMapping("/online")
     public Map<String, Object> online() {

@@ -1,10 +1,12 @@
 package com.game.component;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import java.util.concurrent.TimeUnit;
 
 @Component
+@RequiredArgsConstructor
 public class RedisKeyManager {
 
     private static final long ROOM_TTL_HOURS = 24;
@@ -12,10 +14,6 @@ public class RedisKeyManager {
     private static final long GAME_TTL_HOURS = 1;
 
     private final RedisTemplate<String, Object> redisTemplate;
-
-    public RedisKeyManager(RedisTemplate<String, Object> redisTemplate) {
-        this.redisTemplate = redisTemplate;
-    }
 
     /**
      * 刷新房间和玩家信息的 TTL（不刷新游戏数据）

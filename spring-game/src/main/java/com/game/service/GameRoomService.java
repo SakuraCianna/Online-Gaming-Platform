@@ -8,6 +8,7 @@ import com.game.entity.User;
 import com.game.exception.BusinessException;
 import com.game.mapper.GameRoomMapper;
 import com.game.mapper.UserMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -21,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 @Transactional
 @Slf4j
+@RequiredArgsConstructor
 public class GameRoomService {
     private final GameRoomMapper gameRoomMapper;
     private final UserMapper userMapper;
@@ -28,17 +30,6 @@ public class GameRoomService {
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
     private final RedisKeyManager redisKeyManager;
-
-    public GameRoomService(GameRoomMapper gameRoomMapper, UserMapper userMapper,
-            RedisTemplate<String, Object> redisTemplate, ObjectMapper objectMapper,
-            SimpMessagingTemplate messagingTemplate, RedisKeyManager redisKeyManager) {
-        this.gameRoomMapper = gameRoomMapper;
-        this.userMapper = userMapper;
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
-        this.messagingTemplate = messagingTemplate;
-        this.redisKeyManager = redisKeyManager;
-    }
 
     public Map<String, Object> checkRoomCode(String roomCode) {
         String key = redisKeyManager.buildRoomKey(roomCode);
@@ -991,6 +982,7 @@ public class GameRoomService {
 
     /**
      * 智能模式切换：随机分配队伍/座位
+     * 优化：1. 房主始终在队伍A；2. 返回完整玩家列表信息
      */
     public Map<String, Object> switchMode(Map<String, Object> request, Long currentUserId) {
         String roomCode = (String) request.get("roomCode");
@@ -1024,30 +1016,90 @@ public class GameRoomService {
 
             // 获取所有玩家
             String playerKey = redisKeyManager.buildPlayerKey(roomCode);
+            if (playerKey == null || playerKey.isEmpty()) {
+                throw new BusinessException(500, "玩家Key生成失败");
+            }
             Map<Object, Object> playersData = redisTemplate.opsForHash().entries(playerKey);
+            
+            List<Map<String, Object>> updatedPlayers = new ArrayList<>();
             
             if (!playersData.isEmpty()) {
                 List<Map.Entry<Object, Object>> playerEntries = new ArrayList<>(playersData.entrySet());
 
-                Collections.shuffle(playerEntries); // 随机打乱顺序
                 if (teamMode == 1) {
-                    // 切换到2v2模式：随机分配队伍
-
-                    for (int i = 0; i < playerEntries.size(); i++) {
-                        Map.Entry<Object, Object> entry = playerEntries.get(i);
+                    // 切换到2v2模式：房主固定在队伍1，其他玩家随机分配
+                    
+                    // 分离房主和其他玩家
+                    Map.Entry<Object, Object> ownerEntry = null;
+                    List<Map.Entry<Object, Object>> otherEntries = new ArrayList<>();
+                    
+                    for (Map.Entry<Object, Object> entry : playerEntries) {
                         try {
                             RoomPlayer player = objectMapper.convertValue(entry.getValue(), RoomPlayer.class);
-                            // 随机分配：前一半队伍1，后一半队伍2
-                            player.setTeamId(i < playerEntries.size() / 2.0 ? 1 : 2);
-                            player.setPosition(i + 1);
-                            redisTemplate.opsForHash().put(playerKey, entry.getKey().toString(), player);
+                            if (player.getUserId() == room.getCreatorId()) {
+                                ownerEntry = entry;
+                            } else {
+                                otherEntries.add(entry);
+                            }
                         } catch (Exception e) {
-                            // 忽略解析错误
+                            log.error("解析玩家数据失败: {}", e.getMessage());
+                        }
+                    }
+                    
+                    // 随机打乱其他玩家
+                    Collections.shuffle(otherEntries);
+                    
+                    int position = 1;
+                    
+                    // 房主固定在队伍1的第一个位置
+                    if (ownerEntry != null && ownerEntry.getKey() != null) {
+                        try {
+                            RoomPlayer owner = objectMapper.convertValue(ownerEntry.getValue(), RoomPlayer.class);
+                            owner.setTeamId(1);
+                            owner.setPosition(position++);
+                            String ownerKey = ownerEntry.getKey().toString();
+                            if (ownerKey != null && !ownerKey.isEmpty()) {
+                                redisTemplate.opsForHash().put(playerKey, ownerKey, owner);
+                            }
+                            updatedPlayers.add(buildPlayerInfo(owner));
+                        } catch (Exception e) {
+                            log.error("更新房主信息失败: {}", e.getMessage());
+                        }
+                    }
+                    
+                    // 其他玩家分配：根据位置交替分配到队伍1和队伍2
+                    // 队伍1还有1个位置，队伍2有2个位置
+                    int team1Count = 1; // 房主已占1个
+                    int team2Count = 0;
+                    
+                    for (Map.Entry<Object, Object> entry : otherEntries) {
+                        try {
+                            RoomPlayer player = objectMapper.convertValue(entry.getValue(), RoomPlayer.class);
+                            
+                            // 队伍1最多2人，队伍2最多2人
+                            if (team1Count < 2) {
+                                player.setTeamId(1);
+                                team1Count++;
+                            } else if (team2Count < 2) {
+                                player.setTeamId(2);
+                                team2Count++;
+                            } else {
+                                // 超过4人的情况，继续交替分配
+                                player.setTeamId((position % 2 == 0) ? 1 : 2);
+                            }
+                            
+                            player.setPosition(position++);
+                            redisTemplate.opsForHash().put(playerKey, entry.getKey().toString(), player);
+                            updatedPlayers.add(buildPlayerInfo(player));
+                        } catch (Exception e) {
+                            log.error("更新玩家信息失败: {}", e.getMessage());
                         }
                     }
                 } else {
                     // 切换到混战模式：清空队伍，随机分配座位
 
+                    Collections.shuffle(playerEntries); // 随机打乱顺序
+                    
                     for (int i = 0; i < playerEntries.size(); i++) {
                         Map.Entry<Object, Object> entry = playerEntries.get(i);
                         try {
@@ -1055,8 +1107,9 @@ public class GameRoomService {
                             player.setTeamId(0); // 无队伍
                             player.setPosition(i + 1); // 重新分配座位位置
                             redisTemplate.opsForHash().put(playerKey, entry.getKey().toString(), player);
+                            updatedPlayers.add(buildPlayerInfo(player));
                         } catch (Exception e) {
-                            // 忽略解析错误
+                            log.error("更新玩家信息失败: {}", e.getMessage());
                         }
                     }
                 }
@@ -1065,12 +1118,13 @@ public class GameRoomService {
             // 刷新TTL
             redisKeyManager.refreshRoomTTL(roomCode);
 
-            // 推送模式切换完成消息
+            // 推送模式切换完成消息（包含完整玩家列表）
             Map<String, Object> switchedMessage = new HashMap<>();
             switchedMessage.put("type", "modeSwitched");
             switchedMessage.put("mode", newMode);
             switchedMessage.put("teamMode", teamMode);
-            switchedMessage.put("message", teamMode == 1 ? "已切换到团队模式，队伍已随机分配" : "已切换到混战模式，座位已重新分配");
+            switchedMessage.put("players", updatedPlayers); // 包含完整的玩家列表
+            switchedMessage.put("message", teamMode == 1 ? "已切换到团队模式，房主在队伍A，其他成员已随机分配" : "已切换到混战模式，座位已重新分配");
 
             messagingTemplate.convertAndSend("/topic/room/" + roomCode, switchedMessage);
 
@@ -1080,9 +1134,50 @@ public class GameRoomService {
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", "切换模式失败: " + e.getMessage());
-            log.error(String.valueOf(e));
+            log.error("切换模式异常: {}", e.getMessage(), e);
         }
 
         return result;
+    }
+    
+    /**
+     * 构建玩家信息Map（用于WebSocket消息）
+     */
+    private Map<String, Object> buildPlayerInfo(RoomPlayer player) {
+        Map<String, Object> playerInfo = new HashMap<>();
+        
+        try {
+            if (player.getIsAi() == 1) {
+                // AI玩家
+                long aiUserId = player.getUserId();
+                int aiNumber = (int) (Math.abs(aiUserId) + 1);
+                String aiDisplayName = "AI Player #" + aiNumber;
+                
+                playerInfo.put("userId", aiUserId);
+                playerInfo.put("username", aiDisplayName);
+                playerInfo.put("avatar", "/image/default-avatar.jpg");
+                playerInfo.put("isAi", 1);
+                playerInfo.put("aiType", player.getAiType());
+            } else {
+                // 真人玩家
+                User user = userMapper.selectById(player.getUserId());
+                if (user != null) {
+                    playerInfo.put("userId", player.getUserId());
+                    playerInfo.put("username", user.getUsername());
+                    playerInfo.put("avatar", user.getAvatar() != null ? user.getAvatar() : "/image/default-avatar.jpg");
+                    playerInfo.put("isAi", 0);
+                }
+            }
+            
+            // 公共字段
+            playerInfo.put("teamId", player.getTeamId());
+            playerInfo.put("isReady", player.getIsReady());
+            playerInfo.put("playerRole", player.getPlayerRole());
+            playerInfo.put("position", player.getPosition());
+        } catch (Exception e) {
+            log.error("构建玩家信息失败: {}", e.getMessage());
+        }
+        
+        return playerInfo;
     }
 }

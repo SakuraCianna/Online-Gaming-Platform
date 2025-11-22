@@ -1,6 +1,7 @@
 package com.game.config;
 
 import com.game.mapper.UserMapper;
+import lombok.RequiredArgsConstructor;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
 import org.springframework.boot.CommandLineRunner;
@@ -14,15 +15,11 @@ import java.util.List;
  * Redis布隆过滤器配置
  */
 @Configuration
+@RequiredArgsConstructor
 public class RedisBloomFilterConfig {
 
     private final RedissonClient redissonClient;
     private final UserMapper userMapper;
-
-    public RedisBloomFilterConfig(RedissonClient redissonClient, UserMapper userMapper) {
-        this.redissonClient = redissonClient;
-        this.userMapper = userMapper;
-    }
 
     /**
      * 创建用户ID布隆过滤器Bean

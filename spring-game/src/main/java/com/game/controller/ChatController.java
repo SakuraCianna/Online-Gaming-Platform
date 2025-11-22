@@ -2,6 +2,7 @@ package com.game.controller;
 
 import com.game.entity.FriendChat;
 import com.game.mapper.FriendChatMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,14 +13,10 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/chat")
+@RequiredArgsConstructor
 public class ChatController {
     private final FriendChatMapper friendChatMapper;
     private final SimpMessagingTemplate messagingTemplate;
-
-    public ChatController(FriendChatMapper friendChatMapper, SimpMessagingTemplate messagingTemplate) {
-        this.friendChatMapper = friendChatMapper;
-        this.messagingTemplate = messagingTemplate;
-    }
 
     @PostMapping("sendFriendMessage")
     @Transactional

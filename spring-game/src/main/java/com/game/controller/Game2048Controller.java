@@ -2,6 +2,7 @@ package com.game.controller;
 
 import com.game.entity.Game2048;
 import com.game.service.Game2048Service;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,12 +10,9 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/2048")
+@RequiredArgsConstructor
 public class Game2048Controller {
     private final Game2048Service game2048Service;
-
-    public Game2048Controller(Game2048Service game2048Service) {
-        this.game2048Service = game2048Service;
-    }
 
     @PostMapping("/save")
     public ResponseEntity<Map<String, Object>> save(@RequestBody Map<String, Object> request) {

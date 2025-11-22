@@ -2,6 +2,7 @@ package com.game.controller;
 
 import com.game.entity.Minesweeper;
 import com.game.service.MinesweeperService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,12 +10,9 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/minesweeper")
+@RequiredArgsConstructor
 public class MinesweeperController {
     private final MinesweeperService minesweeperService;
-
-    public MinesweeperController(MinesweeperService minesweeperService) {
-        this.minesweeperService = minesweeperService;
-    }
 
     @PostMapping("/save")
     public ResponseEntity<Map<String, Object>> save(@RequestBody Map<String, Object> request) {

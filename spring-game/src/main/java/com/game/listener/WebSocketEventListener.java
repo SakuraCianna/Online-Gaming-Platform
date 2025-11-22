@@ -1,6 +1,7 @@
 package com.game.listener;
 
 import com.game.service.UserStateService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -13,15 +14,11 @@ import java.util.Objects;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class WebSocketEventListener {
 
     private final StringRedisTemplate redisTemplate;
     private final UserStateService userStateService;
-
-    public WebSocketEventListener(StringRedisTemplate redisTemplate, UserStateService userStateService) {
-        this.redisTemplate = redisTemplate;
-        this.userStateService = userStateService;
-    }
 
     @EventListener
     public void handleSessionConnect(SessionConnectEvent event) {

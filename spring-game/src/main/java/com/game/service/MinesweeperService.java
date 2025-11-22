@@ -4,6 +4,7 @@ import com.game.config.RabbitMQConfig;
 import com.game.dto.GameRecordMessageDTO;
 import com.game.exception.BusinessException;
 import com.game.mapper.MinesweeperMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
@@ -17,15 +18,11 @@ import java.util.Map;
 @Slf4j
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class MinesweeperService {
 
     private final MinesweeperMapper minesweeperMapper;
     private final RabbitTemplate rabbitTemplate;
-
-    public MinesweeperService(MinesweeperMapper minesweeperMapper, RabbitTemplate rabbitTemplate) {
-        this.minesweeperMapper = minesweeperMapper;
-        this.rabbitTemplate = rabbitTemplate;
-    }
 
     public Map<String, Object> saveData(Map<String, Object> request) {
         log.info("开始保存扫雷游戏数据: userId={}", request.get("user_id"));

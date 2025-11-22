@@ -676,8 +676,74 @@ async function handleRoomMessage(data) {
             selectedMode.value = data.mode
         }
         
-        // 重新加载玩家列表以获取最新的队伍分配和座位安排
-        await loadRoomPlayers()
+        // 直接使用后端返回的完整玩家列表数据，无需重新请求
+        if (data.players && Array.isArray(data.players)) {
+            // 清空所有座位
+            for (const seat of seats.value) {
+                seat.player = null
+                seat.ready = false
+            }
+
+            // 根据模式分配座位
+            if (selectedMode.value === '2v2') {
+                // 2v2模式：按队伍和position分配座位
+                // 左侧座位（0,2）给队伍1（teamId=1），右侧座位（1,3）给队伍2（teamId=2）
+                const team1Players = data.players.filter(p => p.teamId === 1).sort((a, b) => a.position - b.position)
+                const team2Players = data.players.filter(p => p.teamId === 2).sort((a, b) => a.position - b.position)
+                
+                // 队伍1分配到左侧座位
+                const team1Seats = [0, 2]
+                team1Players.forEach((playerData, idx) => {
+                    if (idx < team1Seats.length) {
+                        const seatIndex = team1Seats[idx]
+                        const isAI = playerData.isAi === 1
+                        seats.value[seatIndex].player = {
+                            id: playerData.userId,
+                            username: playerData.username,
+                            avatar: playerData.avatar || '/image/default-avatar.jpg',
+                            isAI: isAI
+                        }
+                        seats.value[seatIndex].team = 1
+                        seats.value[seatIndex].ready = isAI || playerData.isReady === 1
+                    }
+                })
+                
+                // 队伍2分配到右侧座位
+                const team2Seats = [1, 3]
+                team2Players.forEach((playerData, idx) => {
+                    if (idx < team2Seats.length) {
+                        const seatIndex = team2Seats[idx]
+                        const isAI = playerData.isAi === 1
+                        seats.value[seatIndex].player = {
+                            id: playerData.userId,
+                            username: playerData.username,
+                            avatar: playerData.avatar || '/image/default-avatar.jpg',
+                            isAI: isAI
+                        }
+                        seats.value[seatIndex].team = 2
+                        seats.value[seatIndex].ready = isAI || playerData.isReady === 1
+                    }
+                })
+            } else {
+                // 混战模式：按position顺序分配座位
+                const sortedPlayers = data.players.sort((a, b) => a.position - b.position)
+                sortedPlayers.forEach((playerData, index) => {
+                    if (index < seats.value.length) {
+                        const isAI = playerData.isAi === 1
+                        seats.value[index].player = {
+                            id: playerData.userId,
+                            username: playerData.username,
+                            avatar: playerData.avatar || '/image/default-avatar.jpg',
+                            isAI: isAI
+                        }
+                        seats.value[index].team = 0 // 混战模式无队伍
+                        seats.value[index].ready = isAI || playerData.isReady === 1
+                    }
+                })
+            }
+        } else {
+            await loadRoomPlayers()
+        }
         
         // 解锁页面
         switchingMode.value = false

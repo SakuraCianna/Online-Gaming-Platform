@@ -14,6 +14,7 @@ import com.game.mapper.GameRoomMapper;
 import com.game.mapper.GomokuMapper;
 import com.game.mapper.RoomPlayerMapper;
 import com.game.vo.PointVO;
+import lombok.RequiredArgsConstructor;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.context.ApplicationEventPublisher;
@@ -30,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class GomokuService {
     private static final String GOMOKU_PROMPT = """
             你是一个专业的五子棋AI助手，擅长分析棋局并给出最优落子策略。
@@ -69,23 +71,6 @@ public class GomokuService {
     private final SimpMessagingTemplate messagingTemplate;
     private final RedisKeyManager redisKeyManager;
     private final ApplicationEventPublisher eventPublisher;
-
-    public GomokuService(RedisTemplate<String, Object> redisTemplate, GomokuMapper gomokuMapper,
-            GameRoomMapper gameRoomMapper, RoomPlayerMapper roomPlayerMapper, ObjectMapper objectMapper,
-            RedissonClient redissonClient, ZhipuAiUtil zhipuAiUtil,
-            SimpMessagingTemplate messagingTemplate, RedisKeyManager redisKeyManager,
-            ApplicationEventPublisher eventPublisher) {
-        this.redisTemplate = redisTemplate;
-        this.gomokuMapper = gomokuMapper;
-        this.gameRoomMapper = gameRoomMapper;
-        this.roomPlayerMapper = roomPlayerMapper;
-        this.objectMapper = objectMapper;
-        this.redissonClient = redissonClient;
-        this.zhipuAiUtil = zhipuAiUtil;
-        this.messagingTemplate = messagingTemplate;
-        this.redisKeyManager = redisKeyManager;
-        this.eventPublisher = eventPublisher;
-    }
 
     public Map<String, Object> startGame(String roomCode, Map<String, Object> request) {
         Map<String, Object> result = new HashMap<>();

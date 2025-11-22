@@ -2,6 +2,7 @@ package com.game.controller;
 
 import com.game.component.JwtUtil;
 import com.game.service.GameRoomService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,12 +10,9 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/room")
+@RequiredArgsConstructor
 public class GameRoomController {
     private final GameRoomService gameRoomService;
-
-    public GameRoomController(GameRoomService gameRoomService) {
-        this.gameRoomService = gameRoomService;
-    }
 
     @GetMapping("/checkRoomCode")
     public ResponseEntity<Map<String, Object>> checkRoomCode(@RequestParam String roomCode) {

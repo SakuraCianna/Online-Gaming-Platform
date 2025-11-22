@@ -9,6 +9,7 @@ import com.game.entity.User;
 import com.game.exception.BusinessException;
 import com.game.mapper.TankBattleMapper;
 import com.game.mapper.UserMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import java.util.Map;
 
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class TankBattleService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final RedisKeyManager redisKeyManager;
@@ -29,15 +31,6 @@ public class TankBattleService {
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
     private final TankBattleMapper tankBattleMapper;
-
-    public TankBattleService(RedisTemplate<String, Object> redisTemplate, RedisKeyManager redisKeyManager, SimpMessagingTemplate messagingTemplate, UserMapper userMapper, ObjectMapper objectMapper, TankBattleMapper tankBattleMapper) {
-        this.redisTemplate = redisTemplate;
-        this.redisKeyManager = redisKeyManager;
-        this.messagingTemplate = messagingTemplate;
-        this.userMapper = userMapper;
-        this.objectMapper = objectMapper;
-        this.tankBattleMapper = tankBattleMapper;
-    }
 
     // 开始游戏
     public Map<String, Object> startGame(String roomCode, Map<String, Object> request, Long currentUserId) {

@@ -4,6 +4,7 @@ import com.game.entity.Friend;
 import com.game.mapper.FriendMapper;
 import com.game.service.FriendService;
 import com.game.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.converter.MessageConverter;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -13,16 +14,11 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/friend")
+@RequiredArgsConstructor
 public class FriendController {
     private final FriendService friendService;
     private final FriendMapper friendMapper;
     private final SimpMessagingTemplate messagingTemplate;
-
-    public FriendController(FriendService friendService, FriendMapper friendMapper, SimpMessagingTemplate messagingTemplate) {
-        this.friendService = friendService;
-        this.friendMapper = friendMapper;
-        this.messagingTemplate = messagingTemplate;
-    }
 
     @GetMapping("/getAllFriend")
     public ResponseEntity<Map<String, Object>> searchAllFriend(@RequestParam long id,

@@ -5,6 +5,7 @@ import com.game.component.RedisKeyManager;
 import com.game.exception.BusinessException;
 import com.game.mapper.FriendMapper;
 import com.game.vo.FriendVO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -19,20 +20,13 @@ import java.util.Map;
 @Slf4j
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class FriendService {
 
     private final FriendMapper friendMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final RedisKeyManager redisKeyManager;
-
-    public FriendService(FriendMapper friendMapper, StringRedisTemplate stringRedisTemplate,
-            SimpMessagingTemplate messagingTemplate, RedisKeyManager redisKeyManager) {
-        this.friendMapper = friendMapper;
-        this.stringRedisTemplate = stringRedisTemplate;
-        this.messagingTemplate = messagingTemplate;
-        this.redisKeyManager = redisKeyManager;
-    }
 
     public Map<String, Object> getAllFriend(long id, int page, int pageSize) {
         log.info("开始查询好友列表: userId={}, page={}, pageSize={}", id, page, pageSize);

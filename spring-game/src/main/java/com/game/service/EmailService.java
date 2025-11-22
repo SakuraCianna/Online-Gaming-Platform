@@ -4,6 +4,7 @@ import com.game.exception.BusinessException;
 import com.game.mapper.UserMapper;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import lombok.RequiredArgsConstructor;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -18,16 +19,11 @@ import java.util.Random;
 
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
     private final UserMapper userMapper;
-
-    public EmailService(JavaMailSender mailSender, TemplateEngine templateEngine, UserMapper userMapper) {
-        this.mailSender = mailSender;
-        this.templateEngine = templateEngine;
-        this.userMapper = userMapper;
-    }
 
     public Map<String, Object> sendCode(String to) {
         try {

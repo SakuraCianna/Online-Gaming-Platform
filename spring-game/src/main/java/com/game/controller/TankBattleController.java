@@ -2,6 +2,7 @@ package com.game.controller;
 
 import com.game.component.JwtUtil;
 import com.game.service.TankBattleService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,12 +10,9 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/tankbattle")
+@RequiredArgsConstructor
 public class TankBattleController {
     private final TankBattleService tankBattleService;
-
-    public TankBattleController(TankBattleService tankBattleService) {
-        this.tankBattleService = tankBattleService;
-    }
 
     @PostMapping("/{roomCode}/start")
     public ResponseEntity<Map<String, Object>> startGame(@PathVariable String roomCode, @RequestBody Map<String, Object> request) {

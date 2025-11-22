@@ -5,6 +5,7 @@ import com.game.component.PasswordUtil;
 import com.game.entity.User;
 import com.game.exception.BusinessException;
 import com.game.mapper.UserMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -13,14 +14,10 @@ import java.util.Map;
 
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class UserService {
     private final UserMapper userMapper;
     private final GameRecordService gameRecordService;
-
-    public UserService(UserMapper userMapper, GameRecordService gameRecordService) {
-        this.userMapper = userMapper;
-        this.gameRecordService = gameRecordService;
-    }
 
     public Map<String, Object> RegisterService(Map<String, Object> request) {
         String email = (String) request.get("email");

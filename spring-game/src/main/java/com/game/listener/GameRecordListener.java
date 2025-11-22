@@ -10,6 +10,7 @@ import com.game.mapper.GomokuMapper;
 import com.game.mapper.MinesweeperMapper;
 import com.game.mapper.TankBattleMapper;
 import com.game.service.UserService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -22,22 +23,14 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class GameRecordListener {
     private final Game2048Mapper game2048Mapper;
     private final GomokuMapper gomokuMapper;
     private final MinesweeperMapper minesweeperMapper;
     private final TankBattleMapper tankBattleMapper;
     private final UserService userService;
-    private final RedisTemplate<String, String> redisTemplate;  // 【新增】用于幂等性检查
-
-    public GameRecordListener(Game2048Mapper game2048Mapper, GomokuMapper gomokuMapper, MinesweeperMapper minesweeperMapper, TankBattleMapper tankBattleMapper, UserService userService, RedisTemplate<String, String> redisTemplate) {
-        this.game2048Mapper = game2048Mapper;
-        this.gomokuMapper = gomokuMapper;
-        this.minesweeperMapper = minesweeperMapper;
-        this.tankBattleMapper = tankBattleMapper;
-        this.userService = userService;
-        this.redisTemplate = redisTemplate;  // 【新增】注入Redis模板
-    }
+    private final RedisTemplate<String, String> redisTemplate;
 
     @RabbitListener(queues = RabbitMQConfig.GAME_RECORD_QUEUE,concurrency = "3-10")
     public void handleGameRecordSave(GameRecordMessageDTO message) {

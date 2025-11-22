@@ -1,5 +1,6 @@
 package com.game.service;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -8,6 +9,7 @@ import java.time.Duration;
 import java.util.Map;
 
 @Service
+@RequiredArgsConstructor
 public class UserStateService {
     private static final Duration STATE_TTL = Duration.ofMinutes(30);
     private static final String KEY_PREFIX = "user:state:";
@@ -17,11 +19,6 @@ public class UserStateService {
     // 使用 StringRedisTemplate 存储简单字符串
     private final StringRedisTemplate redisTemplate;
     private final SimpMessagingTemplate messaging;
-
-    public UserStateService(StringRedisTemplate redisTemplate, SimpMessagingTemplate messaging) {
-        this.redisTemplate = redisTemplate;
-        this.messaging = messaging;
-    }
 
     private String key(long userId) {
         return KEY_PREFIX + userId;

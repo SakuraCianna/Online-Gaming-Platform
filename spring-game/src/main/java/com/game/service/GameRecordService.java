@@ -5,6 +5,7 @@ import com.game.mapper.Game2048Mapper;
 import com.game.mapper.GomokuMapper;
 import com.game.mapper.MinesweeperMapper;
 import com.game.mapper.TankBattleMapper;
+import lombok.RequiredArgsConstructor;
 import org.redisson.api.RBloomFilter;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class GameRecordService {
 
     private final Game2048Mapper game2048Mapper;
@@ -32,20 +34,6 @@ public class GameRecordService {
     // 缓存TTL
     private static final long STATISTICS_CACHE_TTL = 10; // 统计数据10分钟
     private static final long EMPTY_CACHE_TTL = 2; // 空值缓存2分钟
-
-    public GameRecordService(Game2048Mapper game2048Mapper,
-                             MinesweeperMapper minesweeperMapper,
-                             GomokuMapper gomokuMapper,
-                             TankBattleMapper tankBattleMapper,
-                             RedisTemplate<String, Object> redisTemplate,
-                             RBloomFilter<Long> userIdBloomFilter) {
-        this.game2048Mapper = game2048Mapper;
-        this.minesweeperMapper = minesweeperMapper;
-        this.gomokuMapper = gomokuMapper;
-        this.tankBattleMapper = tankBattleMapper;
-        this.redisTemplate = redisTemplate;
-        this.userIdBloomFilter = userIdBloomFilter;
-    }
 
     // 获取用户游戏统计数据（带缓存和布隆过滤器）
     @Transactional(readOnly = true)
