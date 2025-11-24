@@ -1,6 +1,5 @@
 package com.game.controller;
 
-import com.game.exception.BusinessException;
 import com.game.service.GomokuService;
 import com.game.vo.PointVO;
 import lombok.RequiredArgsConstructor;
@@ -9,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
-import javax.crypto.interfaces.PBEKey;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -49,25 +47,14 @@ public class GomokuController {
         return ResponseEntity.ok(result);
     }
 
+    @Deprecated
     @PostMapping("/ai/move")
     public ResponseEntity<Map<String, Object>> getAIMove(@RequestBody Map<String, Object> request) {
         Map<String, Object> result = new HashMap<>();
-        try {
-            result = gomokuService.AI_Move(request);
-            result.put("code", 200);
-            result.put("data", result.remove("move"));
-            return ResponseEntity.ok(result);
-        } catch (BusinessException e) {
-            result.put("code", e.getCode());  // 4001 表示AI无效落子
-            result.put("success", false);
-            result.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.OK).body(result);
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("success", false);
-            result.put("message", "AI计算失败: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
-        }
+        result.put("code", 410);  // 410 Gone - 资源已不存在
+        result.put("success", false);
+        result.put("message", "此接口已废弃，AI逻辑已迁移到前端实现");
+        return ResponseEntity.status(HttpStatus.GONE).body(result);
     }
 
     @PostMapping("/{roomCode}/end")

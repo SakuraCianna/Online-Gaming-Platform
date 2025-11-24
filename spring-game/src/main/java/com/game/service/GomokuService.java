@@ -3,8 +3,8 @@ package com.game.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.component.RedisKeyManager;
+import com.game.component.OllamaUtil;
 import com.game.config.AiModelConfig;
-import com.game.component.ZhipuAiUtil;
 import com.game.entity.GameRoom;
 import com.game.entity.Gomoku;
 import com.game.entity.RoomPlayer;
@@ -15,6 +15,7 @@ import com.game.mapper.GomokuMapper;
 import com.game.mapper.RoomPlayerMapper;
 import com.game.vo.PointVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.context.ApplicationEventPublisher;
@@ -29,37 +30,68 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class GomokuService {
     private static final String GOMOKU_PROMPT = """
-            你是一个专业的五子棋AI助手，擅长分析棋局并给出最优落子策略。
-            【游戏规则】
-            - 棋盘大小：17x17
-            - 胜利条件：横、竖、斜任意方向连成5子即获胜
-            - 棋子颜色：X代表你的棋子，O代表对手棋子，.代表空位
-            【任务要求】
-            1. 分析当前棋盘局势
-            2. 评估进攻和防守的优先级
-            3. 找出最佳落子位置
-            4. 优先级顺序：
-               - 第一优先：如果有五连机会，立即落子取胜
-               - 第二优先：如果对手有四连，必须防守
-               - 第三优先：寻找形成活四、冲四的机会
-               - 第四优先：寻找形成活三的机会
-               - 第五优先：占据战略要地（中心区域、双方棋子附近）
-            【输出格式】
-            必须严格按照以下JSON格式返回，不要添加任何解释文字：
-            {"x": 列坐标, "y": 行坐标}
-            【注意事项】
-            - 只返回一个落子位置
-            - 坐标必须是0-16之间的整数
-            - 不能落在已有棋子的位置（X或O）
-            - 返回的坐标必须是空位（.）
-            - 优先考虑攻防结合的策略
-            - 分析时要考虑未来2-3步的变化
-            """;
+        你是一个专业的五子棋AI大师，拥有超强的棋局分析能力。
+        
+        【游戏规则】
+        - 棋盘大小：17x17（坐标从0到16）
+        - 胜利条件：横、竖、斜任意方向连成5子即获胜
+        - 棋子颜色：X代表你的棋子，O代表对手棋子，.代表空位
+        
+        【关键棋型识别】
+        1. **五连**：XXXXX（立即获胜）
+        2. **活四**：.XXXX.（下一步必胜）
+        3. **冲四**：OXXXX.或.XXXXO（一端被堵）
+        4. **活三**：.XXX..或..XXX.（可形成活四）
+        5. **眠三**：OXXX..或.XXXO（一端被堵）
+        
+        【决策优先级】（必须严格执行）
+        **第一优先：立即获胜**
+           - 如果你有五连机会，立即落子取胜
+           - 检查所有方向：横、竖、左斜、右斜
+        
+        **第二优先：防守对手四连**
+           - 如果对手有活四（.OOOO.），你下一步不防守就会输！
+           - 如果对手有冲四（OOOOO.或.OOOOO），必须堵住缺口！
+           - 这是生死关头，绝对不能忽视！
+        
+        **第三优先：创造活四**
+           - 寻找能形成.XXXX.的位置
+           - 活四是必胜棋型
+        
+        **第四优先：形成活三**
+           - 寻找能形成.XXX..的位置
+           - 为下一步的活四做准备
+        
+        **第五优先：战略要地**
+           - 中心区域（8,8附近）
+           - 对手棋子附近（2格以内）
+           - 避免边角
+        
+        【分析步骤】
+        1. 扫描全棋盘，标记所有X和O的连子
+        2. 检查是否有五连机会→有则立即下
+        3. 检查对手是否有四连→有则立即防守
+        4. 寻找形成活四的机会
+        5. 寻找形成活三的机会
+        6. 选择战略位置
+        
+        【输出格式】
+        必须严格按照JSON格式返回，不要任何解释：
+        {"x": 列坐标, "y": 行坐标}
+        
+        【注意事项】
+        - 坐标范围：0-16
+        - 必须落在空位（.）
+        - 防守四连比进攻更重要（防守失败=直接输）
+        - 仔细检查每个方向（横竖斜）
+        - 不要下在孤立位置
+        """;
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final GomokuMapper gomokuMapper;
@@ -67,7 +99,7 @@ public class GomokuService {
     private final RoomPlayerMapper roomPlayerMapper;
     private final ObjectMapper objectMapper;
     private final RedissonClient redissonClient;
-    private final ZhipuAiUtil zhipuAiUtil;
+    private final OllamaUtil ollamaUtil;
     private final SimpMessagingTemplate messagingTemplate;
     private final RedisKeyManager redisKeyManager;
     private final ApplicationEventPublisher eventPublisher;
@@ -388,6 +420,70 @@ public class GomokuService {
         }
     }
 
+    /**
+     * 分页查询用户游戏记录
+     *
+     * @param userId 用户ID
+     * @param page   页码（从1开始）
+     * @param size   每页大小
+     * @return 分页结果
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getRecordsByUserId(Long userId, Integer page, Integer size) {
+        Map<String, Object> result = new HashMap<>();
+
+        // 参数校验
+        if (userId == null || userId <= 0) {
+            throw new BusinessException(400, "用户ID不能为空");
+        }
+        if (page == null || page < 1) {
+            page = 1;
+        }
+        if (size == null || size < 1 || size > 100) {
+            size = 20; // 默认每页20条
+        }
+
+        try {
+            // 计算偏移量
+            int offset = (page - 1) * size;
+
+            // 查询记录
+            List<Gomoku> records = gomokuMapper.selectByUserIdWithPage(userId, offset, size);
+
+            // 查询总数
+            Integer total = gomokuMapper.countByUserId(userId);
+
+            // 处理记录，添加对手名称和胜负状态
+            if (records != null) {
+                for (Gomoku record : records) {
+                    // 清理敏感数据
+                    record.setGameData(null);
+
+                    // 返回原始数据，让前端根据winnerId和userId判断游戏结果
+                }
+            }
+
+            result.put("success", true);
+            result.put("records", records);
+            result.put("total", total != null ? total : 0);
+            result.put("page", page);
+            result.put("size", size);
+            result.put("totalPages", total != null ? (int) Math.ceil((double) total / size) : 0);
+        } catch (Exception e) {
+            throw new BusinessException(500, "查询游戏记录失败：" + e.getMessage());
+        }
+
+        return result;
+    }
+
+    private boolean isValidMove(int[][] board, int x, int y) {
+        if (x < 0 || x >= 17 || y < 0 || y >= 17) {
+            return false;
+        }
+        return board[y][x] == 0;
+    }
+
+    @Deprecated
     public Map<String, Object> AI_Move(Map<String, Object> request) {
         Map<String, Object> result = new HashMap<>();
         try {
@@ -424,8 +520,8 @@ public class GomokuService {
             }
 
             // 调用大模型获取AI落子
-            PointVO aiMove = getAIMoveFromZhiPuAI(board, aiColor, lastMove, result);
-
+            PointVO aiMove = getAIMoveFromOllama(board, aiColor, lastMove, result);
+            log.info("落子信息为:{}",aiMove);
             // 验证AI返回的落子位置是否有效
             if (!isValidMove(board, aiMove.getX(), aiMove.getY())) {
                 throw new BusinessException(4001, "AI返回了无效的落子位置: (" + aiMove.getX() + ", " + aiMove.getY() + ")");
@@ -442,7 +538,8 @@ public class GomokuService {
         return result;
     }
 
-    private PointVO getAIMoveFromZhiPuAI(int[][] board, int aiColor, PointVO lastMove, Map<String, Object> result) {
+    @Deprecated
+    private PointVO getAIMoveFromOllama(int[][] board, int aiColor, PointVO lastMove, Map<String, Object> result) {
         try {
             // 构建用户提示词
             StringBuilder userPrompt = new StringBuilder();
@@ -451,36 +548,49 @@ public class GomokuService {
             userPrompt.append("\n");
 
             userPrompt.append("【你的颜色】");
-            userPrompt.append(aiColor == 1 ? "黑棋(1)" : "白棋(2)");
+            userPrompt.append(aiColor == 1 ? "黑棋(X)" : "白棋(O)");
             userPrompt.append("\n");
 
             userPrompt.append("【对手颜色】");
-            userPrompt.append(aiColor == 1 ? "白棋(2)" : "黑棋(1)");
+            userPrompt.append(aiColor == 1 ? "白棋(O)" : "黑棋(X)");
             userPrompt.append("\n\n");
+
+            // 统计已占用位置
+            int occupiedCount = 0;
+            for (int y = 0; y < 17; y++) {
+                for (int x = 0; x < 17; x++) {
+                    if (board[y][x] != 0) occupiedCount++;
+                }
+            }
+            
+            userPrompt.append("⚠️【重要提示】\n");
+            userPrompt.append("- 当前棋盘已有 ").append(occupiedCount).append(" 个棋子\n");
+            userPrompt.append("- 你必须选择标记为'.'的空位（空位值为0）\n");
+            userPrompt.append("- X和O的位置已被占用，绝对不能选择！\n");
+            userPrompt.append("- 如果你返回已占用位置，你的落子将被判定为无效并导致游戏异常！\n\n");
 
             if (lastMove != null) {
                 userPrompt.append("【对手最后一步】");
                 userPrompt.append("位置: (").append(lastMove.getX())
                         .append(", ").append(lastMove.getY()).append(")");
-                userPrompt.append("\n\n");
+                userPrompt.append("，该位置已被占用\n\n");
             } else {
                 userPrompt.append("【提示】这是开局，棋盘为空\n\n");
             }
 
-            userPrompt.append("请根据当前棋盘局势，给出你的最佳落子位置。");
+            userPrompt.append("现在请仔细观察棋盘，只在标记为'.'的位置中选择最佳落子点，直接返回JSON格式坐标：");
 
-            // 调用智谱AI
-            String aiResponse = zhipuAiUtil.advancedChat(
-                    List.of(
-                            zhipuAiUtil.buildSystemMessage(GOMOKU_PROMPT),
-                            zhipuAiUtil.buildUserMessage(userPrompt.toString())),
-                    AiModelConfig.MODEL_GLM_4_5_AIRX, // 使用传入的模型名称
-                    2048, // maxTokens
-                    0.7f, // temperature
-                    false // enableThinking
+            // 调用Ollama
+            String aiResponse = ollamaUtil.advancedChat(
+                    GOMOKU_PROMPT,
+                    userPrompt.toString(),
+                    AiModelConfig.MODEL_QWEN_7B_INSTRUCT,
+                    0.15
             );
 
             result.put("aiResponse", aiResponse);
+            result.put("model", AiModelConfig.MODEL_QWEN_7B_INSTRUCT);
+            result.put("aiEngine", "Ollama");
 
             // 解析AI返回的JSON结果
             PointVO aiMove = parseAIResponse(aiResponse);
@@ -491,10 +601,11 @@ public class GomokuService {
 
             return aiMove;
         } catch (Exception e) {
-            throw new BusinessException(500, "获取AI落子失败: " + e.getMessage());
+            throw new BusinessException(500, "获取Ollama AI落子失败: " + e.getMessage());
         }
     }
 
+    @Deprecated
     private String formatBoard(int[][] board, int aiColor) {
         char aiSymbol = (aiColor == 1) ? 'X' : 'O';
         char opponentSymbol = (aiColor == 1) ? 'O' : 'X';
@@ -527,6 +638,7 @@ public class GomokuService {
         return sb.toString();
     }
 
+    @Deprecated
     private PointVO parseAIResponse(String aiResponse) {
         try {
             String cleanedResponse = aiResponse.trim();
@@ -551,67 +663,6 @@ public class GomokuService {
         }
     }
 
-    private boolean isValidMove(int[][] board, int x, int y) {
-        if (x < 0 || x >= 17 || y < 0 || y >= 17) {
-            return false;
-        }
-        return board[y][x] == 0;
-    }
 
-    /**
-     * 分页查询用户游戏记录
-     * 
-     * @param userId 用户ID
-     * @param page   页码（从1开始）
-     * @param size   每页大小
-     * @return 分页结果
-     */
-    @Transactional(readOnly = true)
-    public Map<String, Object> getRecordsByUserId(Long userId, Integer page, Integer size) {
-        Map<String, Object> result = new HashMap<>();
-
-        // 参数校验
-        if (userId == null || userId <= 0) {
-            throw new BusinessException(400, "用户ID不能为空");
-        }
-        if (page == null || page < 1) {
-            page = 1;
-        }
-        if (size == null || size < 1 || size > 100) {
-            size = 20; // 默认每页20条
-        }
-
-        try {
-            // 计算偏移量
-            int offset = (page - 1) * size;
-
-            // 查询记录
-            List<Gomoku> records = gomokuMapper.selectByUserIdWithPage(userId, offset, size);
-
-            // 查询总数
-            Integer total = gomokuMapper.countByUserId(userId);
-
-            // 处理记录，添加对手名称和胜负状态
-            if (records != null) {
-                for (Gomoku record : records) {
-                    // 清理敏感数据
-                    record.setGameData(null);
-                    
-                    // 返回原始数据，让前端根据winnerId和userId判断游戏结果
-                }
-            }
-
-            result.put("success", true);
-            result.put("records", records);
-            result.put("total", total != null ? total : 0);
-            result.put("page", page);
-            result.put("size", size);
-            result.put("totalPages", total != null ? (int) Math.ceil((double) total / size) : 0);
-        } catch (Exception e) {
-            throw new BusinessException(500, "查询游戏记录失败：" + e.getMessage());
-        }
-
-        return result;
-    }
 
 }
