@@ -42,16 +42,16 @@ watch(selectedMode, async (newMode, oldMode) => {
     if (!roomInfo.value?.roomCode || !user.value?.id) return
     if (switchingMode.value) return // 防止重复触发
     if (!oldMode) return // 首次加载时跳过
-    
+
     switchingMode.value = true
-    
+
     try {
         const response = await request.post('/room/switchMode', {
             roomCode: roomInfo.value.roomCode,
             mode: newMode,
             oldMode: oldMode
         })
-        
+
         if (response.data.success || response.data.code === 200) {
             // 后端会通过WebSocket广播模式切换消息，前端等待消息更新UI
             ElMessage.success('正在切换模式，请稍候...')
@@ -142,7 +142,7 @@ const getAINumber = (index) => {
     const allAIPlayers = seats.value
         .map((seat, idx) => ({ seat, idx }))
         .filter(item => item.seat.player?.isAI)
-    
+
     const currentAIIndex = allAIPlayers.findIndex(item => item.idx === index)
     return currentAIIndex !== -1 ? currentAIIndex + 1 : 0
 }
@@ -171,7 +171,7 @@ const canStartGame = computed(() => {
 
 // AI对手
 async function addAI(seatIndex) {
-    
+
     if (seats.value[seatIndex].player) {
         return
     }
@@ -187,7 +187,7 @@ async function addAI(seatIndex) {
     try {
         // 获取目标座位的队伍和位置信息
         const targetSeat = seats.value[seatIndex]
-        
+
         // 调用后端接口，将AI玩家信息存入Redis
         const response = await request.post('/room/addAI', {
             roomCode: roomInfo.value.roomCode,
@@ -249,49 +249,49 @@ async function switchToTeam(targetTeamId) {
         ElMessage.warning('正在切换队伍，请稍候')
         return
     }
-    
+
     // 检查是否为2v2模式
     if (selectedMode.value !== '2v2') {
         ElMessage.warning('只有团队模式才能切换队伍')
         return
     }
-    
+
     // 查找当前玩家的座位
-    const currentSeatIndex = seats.value.findIndex(seat => 
+    const currentSeatIndex = seats.value.findIndex(seat =>
         seat.player?.id === user.value.id
     )
-    
+
     if (currentSeatIndex === -1) {
         ElMessage.error('未找到您的座位')
         return
     }
-    
+
     const currentTeamId = seats.value[currentSeatIndex].team
-    
+
     // 检查是否尝试切换到同一队伍
     if (currentTeamId === targetTeamId) {
         ElMessage.warning('您已经在这个队伍中了')
         return
     }
-    
+
     // 查找目标队伍的空座位
-    const targetEmptySeat = seats.value.find(seat => 
+    const targetEmptySeat = seats.value.find(seat =>
         seat.team === targetTeamId && !seat.player
     )
-    
+
     if (!targetEmptySeat) {
         ElMessage.warning('目标队伍没有空位')
         return
     }
-    
+
     switchingTeam.value = true
-    
+
     try {
         const response = await request.post('/room/switchTeam', {
             roomCode: roomInfo.value.roomCode,
             targetTeamId: targetTeamId
         })
-        
+
         if (response.data.success || response.data.code === 200) {
             // WebSocket会广播teamSwitched消息更新UI
         } else {
@@ -523,7 +523,7 @@ async function loadRoomPlayers() {
                 // 左侧座位（0,2）给队伍A（teamId=1），右侧座位（1,3）给队伍B（teamId=2）
                 const team1Players = players.filter(p => p.teamId === 1)
                 const team2Players = players.filter(p => p.teamId === 2)
-                
+
                 // 队伍1分配到左侧
                 const team1Seats = [0, 2]
                 team1Players.forEach((playerData, idx) => {
@@ -540,7 +540,7 @@ async function loadRoomPlayers() {
                         seats.value[seatIndex].ready = isAI || playerData.isReady === 1
                     }
                 })
-                
+
                 // 队伍2分配到右侧
                 const team2Seats = [1, 3]
                 team2Players.forEach((playerData, idx) => {
@@ -591,7 +591,7 @@ async function handleRoomMessage(data) {
 
         // 优先使用后端传递的 position 信息确定座位
         let emptySeatIndex = -1
-        
+
         if (data.position !== undefined && data.position !== null && typeof data.position === 'number') {
             // position 从 1 开始，需要减 1 转换为索引
             const targetIndex = data.position - 1
@@ -600,7 +600,7 @@ async function handleRoomMessage(data) {
                 emptySeatIndex = targetIndex
             }
         }
-        
+
         // 如果 position 无效或已被占用，退回到查找空座位
         if (emptySeatIndex === -1) {
             if (selectedMode.value === '2v2' && data.teamId !== undefined && data.teamId !== null) {
@@ -636,7 +636,7 @@ async function handleRoomMessage(data) {
         // 玩家被踢出（支持字符串和数字类型的ID比较）
         const kickedId = String(data.kickedUserId)
         const currentUserId = String(user.value?.id || '')
-        
+
         if (kickedId === currentUserId) {
             ElMessage.warning(`你已被房主 ${data.kickerName || ''} 移出房间`)
             roomStore.clearCurrentRoom()
@@ -655,13 +655,13 @@ async function handleRoomMessage(data) {
         router.push('/user/games')
     } else if (data.type === 'teamSwitched') {
         // 玩家切换队伍完成
-        
+
         // 重新加载玩家列表以获取最新的座位安排
         await loadRoomPlayers()
-        
+
         // 解锁队伍切换
         switchingTeam.value = false
-        
+
         // 显示提示消息
         if (data.userId === user.value?.id) {
             ElMessage.success('切换队伍成功')
@@ -670,12 +670,12 @@ async function handleRoomMessage(data) {
         }
     } else if (data.type === 'modeSwitched') {
         // 游戏模式切换完成
-        
+
         // 更新模式（不触发watch）
         if (data.mode) {
             selectedMode.value = data.mode
         }
-        
+
         // 直接使用后端返回的完整玩家列表数据，无需重新请求
         if (data.players && Array.isArray(data.players)) {
             // 清空所有座位
@@ -690,7 +690,7 @@ async function handleRoomMessage(data) {
                 // 左侧座位（0,2）给队伍1（teamId=1），右侧座位（1,3）给队伍2（teamId=2）
                 const team1Players = data.players.filter(p => p.teamId === 1).sort((a, b) => a.position - b.position)
                 const team2Players = data.players.filter(p => p.teamId === 2).sort((a, b) => a.position - b.position)
-                
+
                 // 队伍1分配到左侧座位
                 const team1Seats = [0, 2]
                 team1Players.forEach((playerData, idx) => {
@@ -707,7 +707,7 @@ async function handleRoomMessage(data) {
                         seats.value[seatIndex].ready = isAI || playerData.isReady === 1
                     }
                 })
-                
+
                 // 队伍2分配到右侧座位
                 const team2Seats = [1, 3]
                 team2Players.forEach((playerData, idx) => {
@@ -744,10 +744,10 @@ async function handleRoomMessage(data) {
         } else {
             await loadRoomPlayers()
         }
-        
+
         // 解锁页面
         switchingMode.value = false
-        
+
         ElMessage.success(data.message || '模式切换完成')
     }
 }
@@ -774,6 +774,10 @@ function handleBeforeUnload() {
 }
 
 onMounted(async () => {
+    // 1. 立即显示页面主体，避免黑屏等待
+    await nextTick()
+    runEnterAnimation()
+
     // 检查房间信息
     if (!roomInfo.value || !roomInfo.value.roomCode) {
         ElMessage.warning('房间信息不存在，请重新创建房间')
@@ -781,19 +785,18 @@ onMounted(async () => {
         return
     }
 
-    // 加载数据
-    await loadFriends()
-    await loadRoomPlayers()
-    
-    // 删除了冲突的兼容逻辑，完全依赖后端数据
+    // 2. 并行加载数据
+    const loadPromises = [
+        loadFriends(),
+        loadRoomPlayers()
+    ]
 
+    // 地图发现可以不阻塞后续逻辑
     discoverMapFiles().catch(error => {
         console.error('加载地图列表失败:', error)
     })
-    
-    // 等待DOM更新完成
-    await nextTick()
-    runEnterAnimation()
+
+    await Promise.all(loadPromises)
 
     // 注册 WebSocket 订阅
     if (wsService && roomInfo.value?.roomCode) {
@@ -806,17 +809,17 @@ onMounted(async () => {
             }
         })
     }
-    
+
     // 监听页面关闭事件
     window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
 onBeforeUnmount(async () => {
     stopCooldownTimer()
-    
+
     // 移除页面关闭监听
     window.removeEventListener('beforeunload', handleBeforeUnload)
-    
+
     // 退出房间（清理Redis数据）
     if (roomInfo.value?.roomCode && user.value?.id) {
         try {
@@ -828,11 +831,11 @@ onBeforeUnmount(async () => {
             console.error('组件卸载时退出房间失败:', error)
         }
     }
-    
+
     // 取消 WebSocket 订阅
     if (wsService && roomInfo.value?.roomCode) {
         wsService.unsubscribe(`/topic/room/${roomInfo.value.roomCode}`)
-        
+
         // 取消游戏开始事件订阅
         if (gameStartSubscription.value) {
             wsService.unsubscribe(`/topic/tankbattle/${roomInfo.value.roomCode}/gameStart`)
@@ -900,8 +903,7 @@ onBeforeUnmount(async () => {
                     <div class="mode-selector">
                         <button v-for="mode in gameModes" :key="mode.value"
                             :class="['mode-chip', { active: selectedMode === mode.value }]"
-                            :disabled="!isRoomOwner || switchingMode"
-                            @click="selectedMode = mode.value"
+                            :disabled="!isRoomOwner || switchingMode" @click="selectedMode = mode.value"
                             :title="isRoomOwner ? mode.description : '只有房主可以切换模式'">
                             <span class="mode-name">{{ mode.label }}</span>
                             <span class="mode-info">{{ mode.description }}</span>
@@ -928,8 +930,8 @@ onBeforeUnmount(async () => {
                     <div class="friends-list">
                         <div v-for="friend in sortedFriends.slice(0, 4)" :key="friend.id"
                             :class="['friend-card', { offline: !friend.online }]">
-                            <img :src="friend.avatar || '/image/default-avatar.jpg'" :alt="(friend.name || friend.username) + '的头像'"
-                                class="friend-img" />
+                            <img :src="friend.avatar || '/image/default-avatar.jpg'"
+                                :alt="(friend.name || friend.username) + '的头像'" class="friend-img" />
                             <div class="friend-details">
                                 <span class="friend-username">{{ friend.name || friend.username }}</span>
                                 <span class="friend-state">{{ statusText(friend) }}</span>
@@ -966,13 +968,13 @@ onBeforeUnmount(async () => {
                         <div class="switching-hint">请稍候，正在重新分配队伍</div>
                     </div>
                 </div>
-                
+
                 <div class="area-header">
                     <h2>准备区域</h2>
                     <span class="player-count">{{ occupiedSeatsCount }}/{{ currentModeConfig?.players ||
                         4 }}</span>
                 </div>
-                
+
                 <div v-if="selectedMode === '2v2'" class="team-mode-hint">
                     <div class="team-hint team-a-hint">
                         <Icon icon="mdi:shield" width="16" />
@@ -995,7 +997,8 @@ onBeforeUnmount(async () => {
                         <template v-if="seat.player">
                             <div class="slot-content">
                                 <div class="player-avatar-wrapper">
-                                    <img :src="seat.player.avatar" :alt="seat.player.username + '的头像'" class="player-img" />
+                                    <img :src="seat.player.avatar" :alt="seat.player.username + '的头像'"
+                                        class="player-img" />
                                     <span class="player-badge" :class="{
                                         'badge-ai': seat.player.isAI,
                                         'badge-me': seat.player.id === user?.id
@@ -1010,20 +1013,19 @@ onBeforeUnmount(async () => {
                                         <span class="status-text">{{ seat.ready ? '已就位' : '准备中' }}</span>
                                     </div>
                                 </div>
-                                
+
                                 <!-- 切换队伍按钮（只有本人且在2v2模式下显示） -->
-                                <button v-if="seat.player.id === user?.id && selectedMode === '2v2' && !seat.player.isAI" 
-                                    class="btn-switch-team"
-                                    :disabled="switchingTeam || switchingMode"
+                                <button
+                                    v-if="seat.player.id === user?.id && selectedMode === '2v2' && !seat.player.isAI"
+                                    class="btn-switch-team" :disabled="switchingTeam || switchingMode"
                                     @click="switchToTeam(seat.team === 1 ? 2 : 1)"
                                     :title="`切换到${seat.team === 1 ? '队伍B' : '队伍A'}`">
                                     <Icon icon="mdi:swap-horizontal" width="16" />
                                 </button>
-                                
+
                                 <!-- 踢出按钮（房主踢其他人） -->
                                 <button v-if="isRoomOwner && seat.player.id !== user?.id" class="btn-remove"
-                                    :disabled="switchingMode || switchingTeam"
-                                    @click="removePlayer(index)">
+                                    :disabled="switchingMode || switchingTeam" @click="removePlayer(index)">
                                     <Icon icon="mdi:close" width="16" />
                                 </button>
                             </div>
@@ -1034,9 +1036,8 @@ onBeforeUnmount(async () => {
                                 <Icon icon="mdi:account-plus-outline" width="32" />
                                 <span>等待玩家</span>
                                 <!-- 只有房主才能添加AI -->
-                                <button v-if="isRoomOwner" class="btn-add-ai" 
-                                    :disabled="switchingMode || switchingTeam || addingAI[index]" 
-                                    @click="addAI(index)">
+                                <button v-if="isRoomOwner" class="btn-add-ai"
+                                    :disabled="switchingMode || switchingTeam || addingAI[index]" @click="addAI(index)">
                                     <Icon v-if="addingAI[index]" icon="mdi:loading" class="spin" width="16" />
                                     <Icon v-else icon="mdi:robot" width="16" />
                                     <span>{{ addingAI[index] ? '添加中...' : '添加 AI' }}</span>
@@ -1047,11 +1048,11 @@ onBeforeUnmount(async () => {
                 </div>
 
                 <!-- 开始按钮（只有房主可见） -->
-                <button v-if="isRoomOwner" class="btn-start-game" 
-                    :disabled="switchingMode || switchingTeam || !canStartGame" 
-                    @click="startGame">
+                <button v-if="isRoomOwner" class="btn-start-game"
+                    :disabled="switchingMode || switchingTeam || !canStartGame" @click="startGame">
                     <Icon icon="mdi:rocket-launch" width="20" />
-                    <span>{{ canStartGame ? '开始战斗' : `等待玩家 (${occupiedSeatsCount}/${currentModeConfig?.players})` }}</span>
+                    <span>{{ canStartGame ? '开始战斗' : `等待玩家 (${occupiedSeatsCount}/${currentModeConfig?.players})`
+                        }}</span>
                 </button>
             </main>
 
@@ -1704,10 +1705,10 @@ onBeforeUnmount(async () => {
     left: 50%;
     bottom: 0;
     width: 3px;
-    background: linear-gradient(180deg, 
-        rgba(59, 130, 246, 0.6) 0%, 
-        rgba(255, 255, 255, 0.4) 50%, 
-        rgba(239, 68, 68, 0.6) 100%);
+    background: linear-gradient(180deg,
+            rgba(59, 130, 246, 0.6) 0%,
+            rgba(255, 255, 255, 0.4) 50%,
+            rgba(239, 68, 68, 0.6) 100%);
     transform: translateX(-50%);
     z-index: 0;
     box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
@@ -1897,10 +1898,13 @@ onBeforeUnmount(async () => {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 1;
         transform: scale(1);
     }
+
     50% {
         opacity: 0.6;
         transform: scale(0.9);
@@ -2009,17 +2013,17 @@ onBeforeUnmount(async () => {
     height: 100%;
 }
 
-.slot-empty > .iconify {
+.slot-empty>.iconify {
     opacity: 0.4;
     transition: all 0.3s ease;
 }
 
-.slot-empty:hover > .iconify {
+.slot-empty:hover>.iconify {
     opacity: 0.7;
     transform: scale(1.1);
 }
 
-.slot-empty > span {
+.slot-empty>span {
     font-size: 14px;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.5);
@@ -2149,7 +2153,8 @@ onBeforeUnmount(async () => {
 }
 
 /* ===== 图标样式 ===== */
-.iconify, svg.iconify {
+.iconify,
+svg.iconify {
     display: inline-block;
     vertical-align: middle;
     color: inherit;

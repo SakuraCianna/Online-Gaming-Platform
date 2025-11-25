@@ -34,7 +34,8 @@ public class GomokuController {
     }
 
     @PostMapping("/{roomCode}/start")
-    public ResponseEntity<Map<String, Object>> startGame(@PathVariable String roomCode, @RequestBody Map<String, Object> request) {
+    public ResponseEntity<Map<String, Object>> startGame(@PathVariable String roomCode,
+            @RequestBody Map<String, Object> request) {
         Map<String, Object> result = gomokuService.startGame(roomCode, request);
         result.put("code", 200);
         return ResponseEntity.ok(result);
@@ -47,19 +48,62 @@ public class GomokuController {
         return ResponseEntity.ok(result);
     }
 
-    @Deprecated
     @PostMapping("/ai/move")
     public ResponseEntity<Map<String, Object>> getAIMove(@RequestBody Map<String, Object> request) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 410);  // 410 Gone - 资源已不存在
-        result.put("success", false);
-        result.put("message", "此接口已废弃，AI逻辑已迁移到前端实现");
-        return ResponseEntity.status(HttpStatus.GONE).body(result);
+        try {
+            // 参数验证
+            if (request.get("board") == null) {
+                throw new IllegalArgumentException("棋盘数据不能为空");
+            }
+            if (request.get("aiColor") == null || request.get("playerColor") == null) {
+                throw new IllegalArgumentException("颜色参数不能为空");
+            }
+
+            // 处理board的类型转换
+            int[][] board;
+            Object boardObj = request.get("board");
+            if (boardObj instanceof java.util.List) {
+                @SuppressWarnings("unchecked")
+                java.util.List<java.util.List<Integer>> boardList = (java.util.List<java.util.List<Integer>>) boardObj;
+                board = new int[boardList.size()][];
+                for (int i = 0; i < boardList.size(); i++) {
+                    java.util.List<Integer> row = boardList.get(i);
+                    board[i] = new int[row.size()];
+                    for (int j = 0; j < row.size(); j++) {
+                        board[i][j] = row.get(j);
+                    }
+                }
+            } else {
+                board = (int[][]) boardObj;
+            }
+
+            int aiColor = ((Number) request.get("aiColor")).intValue();
+            int playerColor = ((Number) request.get("playerColor")).intValue();
+            String difficulty = (String) request.getOrDefault("difficulty", "hard");
+
+            // 调用AI算法（根据难度分配）
+            Map<String, Integer> move = gomokuService.makeMoveByAI(board, aiColor, playerColor, difficulty);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("success", true);
+            result.put("message", "AI计算成功");
+            result.put("move", move);
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("success", false);
+            result.put("message", "AI计算失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
     }
 
     @PostMapping("/{roomCode}/end")
-    public ResponseEntity<Map<String, Object>> endGame(@PathVariable String roomCode,@RequestBody Map<String, Object> request) {
-        Map<String, Object> result = gomokuService.endGame(roomCode,request);
+    public ResponseEntity<Map<String, Object>> endGame(@PathVariable String roomCode,
+            @RequestBody Map<String, Object> request) {
+        Map<String, Object> result = gomokuService.endGame(roomCode, request);
         result.put("code", 200);
         return ResponseEntity.ok(result);
     }

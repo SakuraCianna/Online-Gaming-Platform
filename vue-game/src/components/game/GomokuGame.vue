@@ -8,6 +8,7 @@ import request from '../../config/api'
 import { useUserStore } from '../../config/user'
 import { useRoomStore } from '../../config/room'
 import { storeToRefs } from 'pinia'
+import { now } from '@vueuse/core'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -78,37 +79,6 @@ function canPlaceStone(row, col) {
   return isValidPosition(row, col) && board.value[row]?.[col] === null
 }
 
-// 临时落子并执行回调（用于AI评估）- 性能优化版本
-function withTemporaryStone(row, col, color, callback) {
-  if (!board.value[row]) return null
-
-  // 保存原值
-  const originalValue = board.value[row][col]
-
-  // 临时修改（避免创建新数组）
-  board.value[row][col] = color
-
-  const result = callback()
-
-  // 恢复原值
-  board.value[row][col] = originalValue
-
-  return result
-}
-
-// 遍历所有空位并执行回调
-function findEmptyPosition(callback) {
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    if (!board.value[r]) continue
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (board.value[r][c] !== null) continue
-      const result = callback(r, c)
-      if (result) return result
-    }
-  }
-  return null
-}
-
 // 创建可跟踪的定时器
 function createTrackedTimeout(callback, delay) {
   const timeout = setTimeout(() => {
@@ -118,15 +88,6 @@ function createTrackedTimeout(callback, delay) {
   }, delay)
   activeTimeouts.value.push(timeout)
   return timeout
-}
-
-// 通用棋型查找函数
-function findPatternMove(color, validator) {
-  return findEmptyPosition((r, c) => {
-    return withTemporaryStone(r, c, color, () => {
-      return validator(r, c, color) ? { row: r, col: c } : null
-    })
-  })
 }
 
 // 时间格式化
@@ -253,12 +214,13 @@ async function handleCellClick(row, col) {
 
     // 发送成功后，如果是AI对战且游戏未结束，触发AI落子
     if (isAIGame.value && gameState.value === STATE_PLAYING) {
+      // 立即触发AI落子，思考时间由Worker控制
       createTrackedTimeout(() => {
         // 再次检查游戏状态，确保游戏还在进行中
         if (gameState.value === STATE_PLAYING) {
           aiMove()
         }
-      }, AI_THINK_TIME)
+      }, 100) // 短暂延迟，确保UI更新完成
     }
   } finally {
     // 无论成功失败，解除防抖锁
@@ -530,18 +492,70 @@ function receiveMove(data) {
   placeStone(row, col, data.color, true)
 }
 
-// 选择AI落子策略
-function selectAIStrategy() {
-  switch (aiDifficulty.value) {
-    case 'easy':
-      return getRandomMove()
-    case 'medium':
-      return getMediumMove()
-    case 'hard':
-      return getHardMove()
-    default:
-      return getMediumMove()
+// 选择AI落子策略（调用后端API）
+async function selectAIStrategy() {
+  return await callBackendAI(aiDifficulty.value)
+}
+
+// 统一调用后端AI接口
+async function callBackendAI(difficulty) {
+  const playerColor = myColor.value
+  const aiColor = opponentColor.value
+
+  // 转换棋盘格式：将棋子颜色转为数字（1=黑棋, 2=白棋, null=0）
+  const boardData = board.value.map(row =>
+    row.map(cell => {
+      if (cell === 'black') return 1
+      if (cell === 'white') return 2
+      return 0
+    })
+  )
+
+  // 转换颜色为数字
+  const aiColorNum = aiColor === COLOR_BLACK ? 1 : 2
+  const playerColorNum = playerColor === COLOR_BLACK ? 1 : 2
+
+  try {
+    // 调用后端AI接口
+    const response = await request.post('/gomoku/ai/move', {
+      board: boardData,
+      aiColor: aiColorNum,
+      playerColor: playerColorNum,
+      difficulty: difficulty
+    })
+
+    if (response.data.success && response.data.move) {
+      return {
+        row: response.data.move.row,
+        col: response.data.move.col
+      }
+    } else {
+      throw new Error(response.data.message || 'AI计算失败')
+    }
+  } catch (error) {
+    console.error('后端AI计算失败:', error)
+    // 降级到随机落子
+    return getRandomMoveFallback()
   }
+}
+
+// 降级方案：简单的随机落子
+function getRandomMoveFallback() {
+  const validMoves = []
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (canPlaceStone(r, c)) {
+        validMoves.push({ row: r, col: c })
+      }
+    }
+  }
+  if (validMoves.length === 0) {
+    // 棋盘已满，返回-1表示无法落子
+    console.warn('棋盘已满，无有效落子位置')
+    return { row: -1, col: -1 }
+  }
+  const randomIndex = Math.floor(Math.random() * validMoves.length)
+  return validMoves[randomIndex]
 }
 
 // 验证并执行AI落子
@@ -555,7 +569,7 @@ async function executeAIMove(row, col) {
 
 // 执行降级AI落子
 async function executeFallbackAIMove() {
-  const { row, col } = getRandomMove()
+  const { row, col } = getRandomMoveFallback()
   if (row !== -1 && col !== -1) {
     await sendAIMove(row, col)
   }
@@ -566,7 +580,7 @@ async function aiMove() {
   if (gameState.value !== STATE_PLAYING) return
 
   try {
-    const { row, col } = selectAIStrategy()
+    const { row, col } = await selectAIStrategy()
 
     if (gameState.value !== STATE_PLAYING) return
     if (row === -1 || col === -1) return
@@ -577,7 +591,8 @@ async function aiMove() {
     if (!success && gameState.value === STATE_PLAYING) {
       await executeFallbackAIMove()
     }
-  } catch {
+  } catch (error) {
+    console.error('AI策略失败:', error)
     // AI策略失败，降级到随机算法
     if (gameState.value === STATE_PLAYING) {
       await executeFallbackAIMove().catch(() => {
@@ -624,515 +639,7 @@ async function sendAIMove(row, col) {
   }
 }
 
-// 简单难度：基础战术 + 智能随机（提升版）
-function getRandomMove() {
-  const aiColor = opponentColor.value
-  const playerColor = myColor.value
-
-  // 1. 优先检查AI是否能获胜（一步制胜）
-  const winMove = findWinningMove(aiColor)
-  if (winMove) return winMove
-
-  // 2. 检查是否需要阻止玩家获胜（玩家有4连）
-  const blockMove = findWinningMove(playerColor)
-  if (blockMove) return blockMove
-
-  // 3. 检查AI是否能形成活四
-  const myOpenFour = findOpenFourMove(aiColor)
-  if (myOpenFour) return myOpenFour
-
-  // 4. 阻止对手活四
-  const blockOpenFour = findOpenFourMove(playerColor)
-  if (blockOpenFour) return blockOpenFour
-
-  // 5. 检查玩家是否有3连威胁（双端开放的3连）
-  const blockThreeMove = findThreatenMove(playerColor)
-  if (blockThreeMove) return blockThreeMove
-
-  // 6. 检查AI是否能形成3连（进攻）
-  const attackThreeMove = findThreatenMove(aiColor)
-  if (attackThreeMove) return attackThreeMove
-
-  // 7. 优先选择中心区域的位置
-  const centerMove = findCenterAreaMove()
-  if (centerMove) return centerMove
-
-  // 8. 优先在已有棋子附近落子
-  const nearbyMove = findNearbyMove()
-  if (nearbyMove) return nearbyMove
-
-  // 9. 完全随机选择空位
-  const emptyCells = []
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    if (!board.value[r]) continue
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (board.value[r][c] === null) {
-        emptyCells.push({ row: r, col: c })
-      }
-    }
-  }
-
-  if (emptyCells.length === 0) {
-    return { row: -1, col: -1 }
-  }
-
-  const randomIndex = Math.floor(Math.random() * emptyCells.length)
-  return emptyCells[randomIndex]
-}
-
-// 查找能够获胜的位置（检查是否能形成五连）
-function findWinningMove(color) {
-  return findPatternMove(color, (r, c, color) => checkWinner(r, c, color))
-}
-
-// 查找3连威胁位置（双端开放的3连）
-function findThreatenMove(color) {
-  return findPatternMove(color, (r, c, color) => {
-    const { count, openEnds } = countMaxLine(r, c, color)
-    // 3连且双端开放，或者4连（无论是否开放）
-    return (count >= 3 && openEnds >= 2) || count >= 4
-  })
-}
-
-// 统计某个位置的最大连子数和开放端点
-function countMaxLine(row, col, color) {
-  const directions = [
-    { dr: 0, dc: 1 },
-    { dr: 1, dc: 0 },
-    { dr: 1, dc: 1 },
-    { dr: 1, dc: -1 }
-  ]
-
-  let maxCount = 0
-  let maxOpenEnds = 0
-
-  for (const { dr, dc } of directions) {
-    const result = countLineStones(row, col, dr, dc, color)
-    if (result.count > maxCount || (result.count === maxCount && result.openEnds > maxOpenEnds)) {
-      maxCount = result.count
-      maxOpenEnds = result.openEnds
-    }
-  }
-
-  return { count: maxCount, openEnds: maxOpenEnds }
-}
-
-// 查找活四位置（.XXXX.形态）
-function findOpenFourMove(color) {
-  return findPatternMove(color, (r, c, color) => {
-    const directions = [
-      { dr: 0, dc: 1 },
-      { dr: 1, dc: 0 },
-      { dr: 1, dc: 1 },
-      { dr: 1, dc: -1 }
-    ]
-
-    for (const { dr, dc } of directions) {
-      const { count, openEnds } = countLineStones(r, c, dr, dc, color)
-      // 活四：4连且双端开放
-      if (count === 4 && openEnds === 2) return true
-    }
-    return false
-  })
-}
-
-// 优先选择中心区域
-function findCenterAreaMove() {
-  // 只在棋盘上棋子少于5个时使用此策略
-  if (moveHistory.value.length >= 5) return null
-
-  const center = Math.floor(BOARD_SIZE / 2) // 8
-  const centerCells = []
-
-  // 中心区域：5x5范围
-  for (let r = center - 2; r <= center + 2; r++) {
-    if (r < 0 || r >= BOARD_SIZE) continue
-    if (!board.value[r]) continue
-    for (let c = center - 2; c <= center + 2; c++) {
-      if (c < 0 || c >= BOARD_SIZE) continue
-      if (board.value[r][c] === null) {
-        // 越靠近中心，权重越高
-        const distance = Math.abs(r - center) + Math.abs(c - center)
-        centerCells.push({ row: r, col: c, distance })
-      }
-    }
-  }
-
-  if (centerCells.length === 0) return null
-
-  // 按距离排序，优先选择最中心的
-  centerCells.sort((a, b) => a.distance - b.distance)
-  // 从前3个最中心的位置随机选一个
-  const topCells = centerCells.slice(0, Math.min(3, centerCells.length))
-  const randomIndex = Math.floor(Math.random() * topCells.length)
-  return { row: topCells[randomIndex].row, col: topCells[randomIndex].col }
-}
-
-// 在已有棋子附近找位置（智能随机）
-function findNearbyMove() {
-  const nearbyCells = []
-  const maxDistance = 2
-
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    if (!board.value[r]) continue
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (board.value[r][c] === null && hasStoneNearby(r, c, maxDistance)) {
-        nearbyCells.push({ row: r, col: c })
-      }
-    }
-  }
-
-  if (nearbyCells.length === 0) return null
-  const randomIndex = Math.floor(Math.random() * nearbyCells.length)
-  return nearbyCells[randomIndex]
-}
-
-// 检查某位置附近是否有棋子
-function hasStoneNearby(row, col, maxDistance) {
-  for (let dr = -maxDistance; dr <= maxDistance; dr++) {
-    for (let dc = -maxDistance; dc <= maxDistance; dc++) {
-      if (dr === 0 && dc === 0) continue
-      const nr = row + dr
-      const nc = col + dc
-      // 防御性检查：确保board.value[nr]存在
-      if (isValidPosition(nr, nc) && board.value[nr] && board.value[nr][nc] !== null) {
-        return true
-      }
-    }
-  }
-  return false
-}
-
-// 统计威胁数量（活三和活四）
-function countThreats(row, col, color) {
-  let openThreeCount = 0
-  let openFourCount = 0
-  const directions = [
-    { dr: 0, dc: 1 },
-    { dr: 1, dc: 0 },
-    { dr: 1, dc: 1 },
-    { dr: 1, dc: -1 }
-  ]
-
-  for (const { dr, dc } of directions) {
-    const { count, openEnds } = countLineStones(row, col, dr, dc, color)
-    if (count === 3 && openEnds === 2) openThreeCount++
-    else if (count === 4 && openEnds >= 1) openFourCount++
-  }
-
-  return { openThreeCount, openFourCount }
-}
-
-// 判断是否为双重威胁
-function isDoubleThreat(openThreeCount, openFourCount) {
-  return openThreeCount >= 2 || openFourCount >= 2 || (openThreeCount >= 1 && openFourCount >= 1)
-}
-
-// 查找双三位置（两个或以上的活三交叉）
-function findDoubleThreatMove(color) {
-  return findPatternMove(color, (r, c, color) => {
-    const { openThreeCount, openFourCount } = countThreats(r, c, color)
-    return isDoubleThreat(openThreeCount, openFourCount)
-  })
-}
-
-// 检查是否有冲四
-function hasRushFourAtPosition(row, col, color) {
-  const directions = [
-    { dr: 0, dc: 1 },
-    { dr: 1, dc: 0 },
-    { dr: 1, dc: 1 },
-    { dr: 1, dc: -1 }
-  ]
-
-  for (const { dr, dc } of directions) {
-    const { count, openEnds } = countLineStones(row, col, dr, dc, color)
-    if (count === 4 && openEnds >= 1) return true
-  }
-  return false
-}
-
-// 查找冲四位置（下一步能形成活四的位置）
-function findRushFourMove(color) {
-  return findPatternMove(color, (r, c, color) => hasRushFourAtPosition(r, c, color))
-}
-
-// 中等难度
-function getMediumMove() {
-  const aiColor = opponentColor.value
-  const playerColor = myColor.value
-
-  // 检查AI是否能获胜
-  const winMove = findWinningMove(aiColor)
-  if (winMove) return winMove
-
-  // 阻止对手获胜
-  const blockWin = findWinningMove(playerColor)
-  if (blockWin) return blockWin
-
-  // 检查是否能形成双三/双四（必胜棋形）
-  const myDoubleThreat = findDoubleThreatMove(aiColor)
-  if (myDoubleThreat) return myDoubleThreat
-
-  // 阻止对方双三/双四
-  const opponentDoubleThreat = findDoubleThreatMove(playerColor)
-  if (opponentDoubleThreat) return opponentDoubleThreat
-
-  // 检查是否能形成活四
-  const myOpenFour = findOpenFourMove(aiColor)
-  if (myOpenFour) return myOpenFour
-
-  // 阻止对手活四
-  const blockOpenFour = findOpenFourMove(playerColor)
-  if (blockOpenFour) return blockOpenFour
-
-  // 检查是否能形成冲四（一步成活四）
-  const myRushFour = findRushFourMove(aiColor)
-  if (myRushFour) return myRushFour
-
-  // 阻止对方冲四
-  const opponentRushFour = findRushFourMove(playerColor)
-  if (opponentRushFour) return opponentRushFour
-
-  // 使用强化评分算法
-  const candidates = calculateAllCandidates()
-
-  // 总是选择最高分位置（提升水平）
-  return candidates.length > 0
-    ? { row: candidates[0].row, col: candidates[0].col }
-    : { row: -1, col: -1 }
-}
-
-// 计算所有候选位置并排序
-function calculateAllCandidates() {
-  const candidates = []
-  const aiColor = opponentColor.value
-  const playerColor = myColor.value
-  const searchRadius = 2 // 只搜索棋子周围2格内的位置
-
-  // 只评估有棋子附近的位置
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    if (!board.value[r]) continue
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (board.value[r][c] !== null) continue
-
-      // 检查附近是否有棋子，没有则跳过（除非是第一步）
-      if (moveHistory.value.length > 0 && !hasStoneNearby(r, c, searchRadius)) {
-        continue
-      }
-
-      const attackScore = evaluatePosition(r, c, aiColor)
-      const defenseScore = evaluatePosition(r, c, playerColor)
-
-      const totalScore = attackScore + defenseScore * 1.1
-
-      candidates.push({ row: r, col: c, score: totalScore })
-    }
-  }
-
-  candidates.sort((a, b) => b.score - a.score)
-  return candidates
-}
-
-// 从前N个候选中随机选择
-function selectRandomFromTopN(candidates, n) {
-  const topCandidates = candidates.slice(0, Math.min(n, candidates.length))
-  if (topCandidates.length === 0) return { row: -1, col: -1 }
-
-  const randomIndex = Math.floor(Math.random() * topCandidates.length)
-  return { row: topCandidates[randomIndex].row, col: topCandidates[randomIndex].col }
-}
-
-// 评估某个位置的分数
-function evaluatePosition(row, col, color) {
-  let score = 0
-
-  // 四个方向：横、竖、主对角线、副对角线
-  const directions = [
-    { dr: 0, dc: 1 },   // 横向
-    { dr: 1, dc: 0 },   // 竖向
-    { dr: 1, dc: 1 },   // 主对角线
-    { dr: 1, dc: -1 }   // 副对角线
-  ]
-
-  for (const { dr, dc } of directions) {
-    const lineScore = evaluateLine(row, col, dr, dc, color)
-    score += lineScore
-  }
-
-  return score
-}
-
-// 评估某个方向上的连子情况
-function evaluateLine(row, col, dr, dc, color) {
-  return withTemporaryStone(row, col, color, () => {
-    // 统计连续棋子数和开放端点数
-    const { count, openEnds } = countLineStones(row, col, dr, dc, color)
-    // 根据连子数和开放端点数评分
-    return calculateLineScore(count, openEnds)
-  }) || 0
-}
-
-// 统计某个方向上的连子数和开放端点
-function countLineStones(row, col, dr, dc, color) {
-  let count = 1
-  let openEnds = 0
-
-  // 正向统计
-  openEnds += countSingleDirection(row, col, dr, dc, color, (c) => { count += c })
-
-  // 反向统计
-  openEnds += countSingleDirection(row, col, -dr, -dc, color, (c) => { count += c })
-
-  return { count, openEnds }
-}
-
-// 统计单个方向
-function countSingleDirection(row, col, dr, dc, color, addCount) {
-  let r = row + dr
-  let c = col + dc
-  let localCount = 0
-
-  while (isValidPosition(r, c)) {
-    // 防御性检查：确保board.value[r]存在
-    if (!board.value[r]) {
-      addCount(localCount)
-      return 0
-    }
-
-    if (board.value[r][c] === color) {
-      localCount++
-      r += dr
-      c += dc
-    } else if (board.value[r][c] === null) {
-      addCount(localCount)
-      return 1 // 开放端点
-    } else {
-      addCount(localCount)
-      return 0 // 被阻挡
-    }
-  }
-
-  addCount(localCount)
-  return 0 // 边界阻挡
-}
-
-// 计算分数
-function calculateLineScore(count, openEnds) {
-  if (count >= 5) return 1000000
-
-  // 评分表
-  const scoreMap = {
-    4: [0, 10000, 100000],   // 眠四/冲四/活四 - 活四接近必胜
-    3: [0, 1000, 10000],     // 眠三/冲三/活三 - 活三是强威胁
-    2: [0, 100, 1000],       // 眠二/冲二/活二
-    1: [1, 10, 50]           // 单子
-  }
-
-  const scores = scoreMap[count]
-  if (!scores) return 0
-
-  return scores[openEnds] || 0
-}
-
-// 困难难度
-function getHardMove() {
-  const aiColor = opponentColor.value
-  const move = findBestMoveWithMinMax(aiColor)
-  return move
-}
-
-/*
-  MAX 玩家(AI):
-  目标:让局面评分尽量高（我越有利分越高）
-  在自己回合:从所有可下的位置里，选评分最高的
-
-  MIN 玩家(真人):
-  假设对手也很聪明,会拼命让你难受
-  在对手回合:从所有可下的位置里,选你最难受的那个（评分最低）
-*/
-function findBestMoveWithMinMax(aiColor) {
-  const MAX_DEPTH = 6
-
-  let bestScore = -Infinity
-  let bestPoint = { row: -1, col: -1 }
-
-  // 直接取已经优化好的最佳下载位置进行选择
-  const candidates = calculateAllCandidates()
-
-  // 棋盘为空直接下中间
-  if (candidates.length === 0) return { row: 8, col: 8 }
-
-  // 取前面15个数据以免循环次数过多
-  for (const { row, col } of candidates.slice(0, 15)) {
-    // 该位置不能落子,直接跳下一个
-    if (!canPlaceStone(row, col)) continue
-
-    board.value[row][col] = aiColor
-
-    // 查看这个点是否为最高分
-    const score = minimax(MAX_DEPTH - 1, -Infinity, Infinity, false, aiColor, row, col)
-
-    board.value[row][col] = null
-
-    if (score > bestScore) {
-      bestScore = score
-      bestPoint = { row, col }
-    }
-  }
-  // 如果没找到最优解,直接返回candidates的最优解
-  if (bestPoint.row === -1 && candidates.length > 0) return { row: candidates[0].row, col: candidates[0].col }
-
-  return bestPoint
-}
-
-// MinMax递归
-function minimax(depth, alpha, beta, isMaximizing, aiColor, lastRow, lastCol) {
-  const playerColor = aiColor === COLOR_BLACK ? COLOR_WHITE : COLOR_BLACK
-  const currentColor = isMaximizing ? aiColor : playerColor
-
-  // 达到思考终点,评估上一步对棋影响
-  if (depth === 0) {
-
-  }
-
-  // 检查上一步是否获胜
-  if (checkWinner(lastRow, lastCol, currentColor)) {
-    return isMaximizing ? Infinity : -Infinity
-  }
-
-  // 平局检查
-  if (isBoardFull()) {
-    return 0;
-  }
-
-
-
-
-
-  return 0 // 临时占位
-}
-
-/**
- * 评估当前棋盘状态 - 请在此实现你的算法
- * @param {string} aiColor - AI的颜色
- * @returns {number} - 棋盘评估分数（正数对AI有利，负数对玩家有利）
- */
-function evaluateBoardState(aiColor) {
-  // TODO: 在此实现棋盘状态评估
-  //
-  // 建议评估因素：
-  // 1. 五连：+10000 / -10000
-  // 2. 活四：+5000 / -5000
-  // 3. 冲四：+1000 / -1000
-  // 4. 活三：+500 / -500
-  // 5. 眠三：+100 / -100
-  // 6. 活二：+50 / -50
-  //
-  // 可以复用现有的 evaluatePosition 函数
-
-  return 0 // 临时占位
-}
+// === AI实现已全部迁移到后端 ===
 
 // 认输功能
 async function surrender() {
@@ -1331,13 +838,25 @@ function createMessageHandler() {
       // 根据消息类型分发处理
       switch (data.type) {
         case 'move':
-          receiveMove(data)
+          try {
+            receiveMove(data)
+          } catch (err) {
+            console.error('处理对手落子失败:', err)
+          }
           break
         case 'playerLeft':
-          handleOpponentLeft(data)
+          try {
+            handleOpponentLeft(data)
+          } catch (err) {
+            console.error('处理对手离开失败:', err)
+          }
           break
         case 'gameEnd':
-          handleGameEndNotification(data)
+          try {
+            handleGameEndNotification(data)
+          } catch (err) {
+            console.error('处理游戏结束通知失败:', err)
+          }
           break
         default:
           break
@@ -1603,7 +1122,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="header-center">
         <div class="turn-indicator" :class="{ active: isMyTurn }">
-          {{ isMyTurn ? '你的回合' : (isAIGame ? 'AI思考中' : '对手回合') }}
+          {{ isMyTurn ? '你的回合' : (isAIGame ? 'AI回合' : '对手回合') }}
         </div>
         <!-- 认输按钮 -->
         <button v-if="gameState === STATE_PLAYING" class="btn-surrender" @click="surrender" title="认输">
@@ -1992,6 +1511,76 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: 20px;
+  position: relative;
+}
+
+/* AI思考中提示 */
+.ai-thinking-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.thinking-content {
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 24px 40px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+/* Vue过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: all 0.2s ease;
+}
+
+.fade-enter-from {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.9);
+}
+
+.fade-enter-to {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.fade-leave-from {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.9);
+}
+
+.thinking-icon {
+  animation: spin 1s linear infinite;
+  color: #4CAF50;
+}
+
+.thinking-text {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .game-board {

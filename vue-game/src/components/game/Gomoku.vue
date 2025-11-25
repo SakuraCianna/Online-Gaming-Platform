@@ -61,11 +61,14 @@ async function swapColor() {
   }
 }
 
-function runEnterAnimation() {
+function runStructureAnimation() {
   gsap.from('.gomoku-waiting', { opacity: 0, scale: 0.98, duration: 0.6, ease: 'power2.out' })
   gsap.from(boardRef.value, { scale: 0.92, opacity: 0, duration: 0.8, ease: 'power2.out', delay: 0.1 })
   gsap.from('.seat', { scale: 0.9, opacity: 0, duration: 0.6, ease: 'back.out(1.6)', stagger: 0.1, delay: 0.2 })
-  gsap.from('.friend-list .friend-item', { opacity: 0, scale: 0.95, duration: 0.4, ease: 'power2.out', stagger: 0.04, delay: 0.35 })
+}
+
+function runFriendListAnimation() {
+  gsap.from('.friend-list .friend-item', { opacity: 0, scale: 0.95, duration: 0.4, ease: 'power2.out', stagger: 0.04, delay: 0.1 })
 }
 
 // 加载好友
@@ -541,6 +544,9 @@ async function loadRoomPlayers() {
 onMounted(async () => {
   await nextTick()
 
+  // 1. 立即执行结构动画，避免等待数据加载导致的页面闪烁
+  runStructureAnimation()
+
   // 检查房间信息
   if (!roomInfo.value || !roomInfo.value.roomCode) {
     ElMessage.warning('房间信息不存在，请重新创建房间')
@@ -548,15 +554,15 @@ onMounted(async () => {
     return
   }
 
-  // 先加载好友数据
-  await loadFriends()
+  // 2. 并行加载数据，提高速度
+  await Promise.all([
+    loadFriends(),
+    loadRoomPlayers()
+  ])
 
-  // 加载房间玩家列表
-  await loadRoomPlayers()
-
-  // 等待 DOM 更新后再执行动画
+  // 3. 数据加载完成后，执行好友列表的入场动画
   await nextTick()
-  runEnterAnimation()
+  runFriendListAnimation()
 
   // 进入等待页时先标记当前游戏（好友可见），离开时清除
   try {
