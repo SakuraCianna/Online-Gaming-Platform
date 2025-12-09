@@ -1,12 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LoginRegister from '../components/LoginRegister.vue'
+import AuthLayout from '../components/auth/AuthLayout.vue'
 import { useUserStore } from './user'
 
 const routes = [
   {
     path: '/',
-    name: 'LoginRegister',
-    component: LoginRegister
+    name: 'Auth',
+    component: AuthLayout
   },
   {
     path: '/user',

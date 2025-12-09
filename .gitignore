@@ -13,3 +13,6 @@ dir/
 .DS_Store
 Thumbs.db
 
+.kiro
+.cursor
+.windsurf

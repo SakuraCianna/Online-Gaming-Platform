@@ -26,6 +26,9 @@ const inviteCooldown = ref({})
 const cooldownTimer = ref(null)
 const addingAI = ref({}) // 添加AI的loading状态
 const gameStartSubscription = ref(null) // 游戏开始订阅
+const roomTopic = ref(null) // 保存房间订阅topic
+const gameStartTopic = ref(null) // 保存游戏开始订阅topic
+const modeSwitchTimeout = ref(null) // 模式切换超时定时器
 
 // 游戏模式选择（默认值）
 const selectedMode = ref('1v1v1v1')
@@ -55,12 +58,19 @@ watch(selectedMode, async (newMode, oldMode) => {
         if (response.data.success || response.data.code === 200) {
             // 后端会通过WebSocket广播模式切换消息，前端等待消息更新UI
             ElMessage.success('正在切换模式，请稍候...')
+
+            // 清理旧的超时定时器
+            if (modeSwitchTimeout.value) {
+                clearTimeout(modeSwitchTimeout.value)
+            }
+
             // 设置超时保护，防止WebSocket消息丢失导致永久锁定
-            setTimeout(() => {
+            modeSwitchTimeout.value = setTimeout(() => {
                 if (switchingMode.value) {
                     switchingMode.value = false
                     ElMessage.warning('模式切换超时，请刷新页面')
                 }
+                modeSwitchTimeout.value = null
             }, 10000)
         } else {
             ElMessage.error(response.data.message || '切换模式失败')
@@ -450,6 +460,12 @@ async function startGame() {
 
         assignRandomMap()
 
+        // 先取消旧的游戏开始订阅
+        if (wsService && gameStartTopic.value) {
+            wsService.unsubscribe(gameStartTopic.value)
+            gameStartTopic.value = null
+        }
+
         const response = await request.post(`/tankbattle/${roomInfo.value?.roomCode}/start`, {
             mode: modeValue,
             map: selectedMapPath.value,
@@ -458,8 +474,9 @@ async function startGame() {
         if (response.data.success || response.data.code === 200) {
             ElMessage.success('游戏启动中...')
             // 订阅游戏开始事件，收到后跳转
-            if (wsService) {
-                gameStartSubscription.value = wsService.subscribe(`/topic/tankbattle/${roomInfo.value?.roomCode}/gameStart`, (msg) => {
+            if (wsService && roomInfo.value?.roomCode) {
+                gameStartTopic.value = `/topic/tankbattle/${roomInfo.value.roomCode}/gameStart`
+                gameStartSubscription.value = wsService.subscribe(gameStartTopic.value, (msg) => {
                     try {
                         JSON.parse(msg.body)
                         // 跳转到游戏页面
@@ -655,21 +672,29 @@ async function handleRoomMessage(data) {
         router.push('/user/games')
     } else if (data.type === 'teamSwitched') {
         // 玩家切换队伍完成
+        // 使用非阻塞方式处理，避免阻塞其他消息
+        loadRoomPlayers().then(() => {
+            // 解锁队伍切换
+            switchingTeam.value = false
 
-        // 重新加载玩家列表以获取最新的座位安排
-        await loadRoomPlayers()
-
-        // 解锁队伍切换
-        switchingTeam.value = false
-
-        // 显示提示消息
-        if (data.userId === user.value?.id) {
-            ElMessage.success('切换队伍成功')
-        } else if (data.message) {
-            ElMessage.info(data.message)
-        }
+            // 显示提示消息
+            if (data.userId === user.value?.id) {
+                ElMessage.success('切换队伍成功')
+            } else if (data.message) {
+                ElMessage.info(data.message)
+            }
+        }).catch(error => {
+            console.error('加载房间玩家失败:', error)
+            switchingTeam.value = false
+        })
     } else if (data.type === 'modeSwitched') {
         // 游戏模式切换完成
+
+        // 清理超时定时器
+        if (modeSwitchTimeout.value) {
+            clearTimeout(modeSwitchTimeout.value)
+            modeSwitchTimeout.value = null
+        }
 
         // 更新模式（不触发watch）
         if (data.mode) {
@@ -742,7 +767,10 @@ async function handleRoomMessage(data) {
                 })
             }
         } else {
-            await loadRoomPlayers()
+            // 使用非阻塞方式
+            loadRoomPlayers().catch(error => {
+                console.error('加载房间玩家失败:', error)
+            })
         }
 
         // 解锁页面
@@ -798,9 +826,10 @@ onMounted(async () => {
 
     await Promise.all(loadPromises)
 
-    // 注册 WebSocket 订阅
+    // 注册 WebSocket 订阅并保存topic
     if (wsService && roomInfo.value?.roomCode) {
-        wsService.subscribe(`/topic/room/${roomInfo.value.roomCode}`, (msg) => {
+        roomTopic.value = `/topic/room/${roomInfo.value.roomCode}`
+        wsService.subscribe(roomTopic.value, (msg) => {
             try {
                 const data = JSON.parse(msg.body)
                 handleRoomMessage(data)
@@ -817,6 +846,12 @@ onMounted(async () => {
 onBeforeUnmount(async () => {
     stopCooldownTimer()
 
+    // 清理超时定时器
+    if (modeSwitchTimeout.value) {
+        clearTimeout(modeSwitchTimeout.value)
+        modeSwitchTimeout.value = null
+    }
+
     // 移除页面关闭监听
     window.removeEventListener('beforeunload', handleBeforeUnload)
 
@@ -832,13 +867,17 @@ onBeforeUnmount(async () => {
         }
     }
 
-    // 取消 WebSocket 订阅
-    if (wsService && roomInfo.value?.roomCode) {
-        wsService.unsubscribe(`/topic/room/${roomInfo.value.roomCode}`)
+    // 取消 WebSocket 订阅（使用保存的topic，避免roomCode被清空）
+    if (wsService) {
+        if (roomTopic.value) {
+            wsService.unsubscribe(roomTopic.value)
+            roomTopic.value = null
+        }
 
         // 取消游戏开始事件订阅
-        if (gameStartSubscription.value) {
-            wsService.unsubscribe(`/topic/tankbattle/${roomInfo.value.roomCode}/gameStart`)
+        if (gameStartTopic.value) {
+            wsService.unsubscribe(gameStartTopic.value)
+            gameStartTopic.value = null
             gameStartSubscription.value = null
         }
     }
@@ -1052,7 +1091,7 @@ onBeforeUnmount(async () => {
                     :disabled="switchingMode || switchingTeam || !canStartGame" @click="startGame">
                     <Icon icon="mdi:rocket-launch" width="20" />
                     <span>{{ canStartGame ? '开始战斗' : `等待玩家 (${occupiedSeatsCount}/${currentModeConfig?.players})`
-                        }}</span>
+                    }}</span>
                 </button>
             </main>
 
