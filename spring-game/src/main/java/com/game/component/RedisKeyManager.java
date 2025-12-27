@@ -124,4 +124,8 @@ public class RedisKeyManager {
     public String buildUserStateKey(long userId) {
         return "user:state:" + userId;
     }
+
+    public String buildEmailLimitKey(String  email) {
+        return "email:limit:" + email;
+    }
 }

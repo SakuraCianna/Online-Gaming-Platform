@@ -195,7 +195,7 @@ const players = ref([
     { name: 'AI 3', type: 'AI', health: 300, kills: 0, deaths: 0, bulletsCount: 0, score: 0, respawnTime: 0 }
 ])
 
-// ==================== 游戏配置 ====================
+// 游戏配置
 const GAME_CONFIG = {
     tank: {
         speed: 210,           // 坦克速度（像素/秒）
@@ -426,9 +426,7 @@ function updateTankStats(tank) {
     players.value[tank.playerId].score = tank.score
 }
 
-// AI逻辑已移至服务端，客户端不再处理
-
-// ========== 客户端只负责发送操作和接收状态，不再计算游戏逻辑 ==========
+// AI逻辑已移至服务端，客户端只负责发送操作和接收状态
 
 // 发送玩家操作到服务端
 function sendPlayerAction() {

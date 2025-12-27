@@ -1199,4 +1199,82 @@ onMounted(() => {
     padding: 20px;
   }
 }
+
+/* 移动端小屏幕适配 */
+@media (max-width: 480px) {
+  .error-container {
+    margin: 16px;
+    padding: 24px 16px;
+    border-radius: 16px;
+  }
+
+  .error-code {
+    font-size: 4rem;
+    margin-bottom: 16px;
+  }
+
+  .error-code::after {
+    width: 120px;
+    height: 3px;
+  }
+
+  .error-message {
+    font-size: 1.4rem;
+    margin-bottom: 16px;
+  }
+
+  .error-description {
+    font-size: 0.95rem;
+    margin-bottom: 28px;
+    line-height: 1.5;
+  }
+
+  .action-buttons {
+    gap: 12px;
+  }
+
+  .home-btn,
+  .back-btn {
+    width: 100%;
+    padding: 14px 24px;
+    font-size: 1rem;
+  }
+
+  .btn-icon {
+    font-size: 1.1rem;
+  }
+
+  /* 减少移动端装饰元素数量，提升性能 */
+  .floating-game-icon:nth-child(n+7) {
+    display: none;
+  }
+
+  .error-icon:nth-child(n+10) {
+    display: none;
+  }
+
+  .warning-icon:nth-child(n+8) {
+    display: none;
+  }
+
+  .floating-404:nth-child(n+12) {
+    display: none;
+  }
+
+  .error-bubble:nth-child(n+6) {
+    display: none;
+  }
+
+  .particle:nth-child(n+25) {
+    display: none;
+  }
+
+  .glitch-element:nth-child(n+5) {
+    display: none;
+  }
+
+  .bg-404-text:nth-child(n+15) {
+    display: none;
+  }
+}
 </style>

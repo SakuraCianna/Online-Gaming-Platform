@@ -134,4 +134,40 @@ const props = defineProps({
 .stat-card.games {
     --stat-color: #10b981;
 }
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+    .stat-card {
+        min-width: 140px;
+        padding: 14px;
+        gap: 10px;
+    }
+
+    .stat-icon-wrapper {
+        width: 36px;
+        height: 36px;
+    }
+
+    .stat-icon-wrapper.emoji {
+        font-size: 28px;
+    }
+
+    .stat-icon {
+        font-size: 28px;
+    }
+
+    .stat-value {
+        font-size: 18px;
+    }
+
+    .stat-label {
+        font-size: 11px;
+    }
+
+    .stat-extra {
+        font-size: 10px;
+        bottom: 6px;
+        right: 10px;
+    }
+}
 </style>

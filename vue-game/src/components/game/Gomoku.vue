@@ -1311,13 +1311,356 @@ const canSwapColor = computed(() => {
   .gomoku-waiting {
     padding: 12px;
     gap: 12px;
-    height: 100vh;
+    height: auto;
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+
+  .left {
+    min-height: auto;
+  }
+
+  .top-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .top-hint {
+    position: static;
+    transform: none;
+    order: 3;
+    width: 100%;
+    text-align: center;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .title {
+    font-size: 14px;
+  }
+
+  .room-code {
+    margin-left: 8px;
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .btn {
+    padding: 8px 12px;
+    font-size: 13px;
   }
 
   .right {
     padding: 8px;
     height: auto;
     max-height: 35vh;
+  }
+
+  .friends-header {
+    padding: 6px;
+    font-size: 14px;
+  }
+
+  .friend-item {
+    padding: 8px;
+    margin-bottom: 6px;
+  }
+
+  .friend-info .avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .friend-info .meta .name {
+    font-size: 13px;
+  }
+
+  .friend-info .meta .status {
+    font-size: 11px;
+  }
+
+  .invite-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .stage {
+    margin-top: 12px;
+    padding: 12px;
+  }
+
+  .seats {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 8px;
+  }
+
+  .seat {
+    padding: 12px 16px;
+    min-height: 80px;
+  }
+
+  .seat .avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .piece {
+    width: 18px;
+    height: 18px;
+    right: -4px;
+    bottom: -4px;
+  }
+
+  .seat .meta .name {
+    font-size: 14px;
+  }
+
+  .seat .meta .role {
+    font-size: 11px;
+  }
+
+  .vs-area {
+    gap: 12px;
+    padding: 8px 0;
+  }
+
+  .vs {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
+
+  .swap-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+
+  .btn.start {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  .ai-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .kick-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+    right: 10px;
+    top: 10px;
+  }
+
+  .ai-difficulty-selector {
+    right: 10px;
+    bottom: 10px;
+    padding: 4px 8px;
+  }
+
+  .difficulty-label {
+    font-size: 11px;
+  }
+
+  .difficulty-select {
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .gomoku-waiting {
+    padding: 8px;
+    padding-bottom: 80px;
+  }
+
+  .top-bar {
+    padding: 8px 10px;
+  }
+
+  .title {
+    font-size: 13px;
+    gap: 4px;
+  }
+
+  .title .iconify {
+    width: 18px;
+  }
+
+  .room-code {
+    margin-left: 6px;
+    padding: 2px 6px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .btn .iconify {
+    width: 16px;
+  }
+
+  .right {
+    max-height: 30vh;
+    padding: 6px;
+  }
+
+  .friends-header {
+    font-size: 13px;
+    padding: 4px;
+  }
+
+  .friend-item {
+    padding: 6px;
+  }
+
+  .friend-info .avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  .friend-info .meta .name {
+    font-size: 12px;
+  }
+
+  .friend-info .meta .status {
+    font-size: 10px;
+  }
+
+  .invite-btn {
+    padding: 5px 8px;
+    font-size: 10px;
+    border-radius: 8px;
+  }
+
+  .stage {
+    padding: 8px;
+    margin-top: 8px;
+  }
+
+  .board {
+    border-radius: 8px;
+  }
+
+  .seats {
+    gap: 10px;
+    padding: 6px;
+  }
+
+  .seat {
+    padding: 10px 12px;
+    border-radius: 10px;
+    min-height: 70px;
+    gap: 10px;
+  }
+
+  .seat .avatar {
+    width: 42px;
+    height: 42px;
+  }
+
+  .piece {
+    width: 16px;
+    height: 16px;
+  }
+
+  .seat .meta .name {
+    font-size: 13px;
+  }
+
+  .seat .meta .role {
+    font-size: 10px;
+  }
+
+  .vs-area {
+    gap: 8px;
+  }
+
+  .vs {
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+
+  .swap-btn {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+
+  .btn.start {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .ai-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .kick-btn {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .opponent-seat .ai-btn {
+    right: 8px;
+    bottom: 8px;
+  }
+
+  .ai-difficulty-selector {
+    padding: 3px 6px;
+    gap: 4px;
+  }
+
+  .difficulty-label {
+    font-size: 10px;
+    gap: 2px;
+  }
+
+  .difficulty-select {
+    padding: 2px 4px;
+    font-size: 10px;
+  }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .friend-item:hover {
+    background: #f8f9fa;
+    transform: none;
+  }
+
+  .invite-btn:hover {
+    background: #667eea;
+  }
+
+  .btn.exit:hover {
+    background: #f1f3f5;
+  }
+
+  .btn.start:hover:not(:disabled) {
+    background: #667eea;
+  }
+
+  .swap-btn:hover:not(:disabled) {
+    background: #f1f3f5;
+  }
+
+  .ai-btn:hover {
+    background: #ffd600;
+  }
+
+  .kick-btn:hover {
+    background: #ff4d4f;
   }
 }
 </style>

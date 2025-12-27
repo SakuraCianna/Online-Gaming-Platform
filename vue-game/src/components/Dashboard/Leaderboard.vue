@@ -284,7 +284,7 @@ onMounted(() => {
     margin: 0 auto;
 }
 
-/* ==================== 页面标题 ==================== */
+/* 页面标题 */
 .leaderboard-header {
     display: flex;
     align-items: center;
@@ -322,7 +322,7 @@ onMounted(() => {
     font-weight: 400;
 }
 
-/* ==================== 我的排名卡片 ==================== */
+/* 我的排名卡片 */
 .my-rank-card {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border-radius: 16px;
@@ -379,7 +379,7 @@ onMounted(() => {
     font-size: 32px;
 }
 
-/* ==================== 游戏选择器 ==================== */
+/* 游戏选择器 */
 .game-selector {
     display: flex;
     gap: 12px;
@@ -419,7 +419,7 @@ onMounted(() => {
     font-size: 24px;
 }
 
-/* ==================== 排行类型选择器 ==================== */
+/* 排行类型选择器 */
 .rank-type-selector {
     display: flex;
     gap: 8px;
@@ -453,7 +453,7 @@ onMounted(() => {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* ==================== 空数据 ==================== */
+/* 空数据 */
 .empty-state {
     text-align: center;
     padding: 60px 20px;
@@ -471,7 +471,7 @@ onMounted(() => {
     margin: 0;
 }
 
-/* ==================== 前三名特殊展示 ==================== */
+/* 前三名特殊展示 */
 .top-three {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -573,7 +573,7 @@ onMounted(() => {
     color: #9ca3af;
 }
 
-/* ==================== 排名列表 ==================== */
+/* 排名列表 */
 .rank-list {
     display: flex;
     flex-direction: column;
@@ -645,7 +645,7 @@ onMounted(() => {
     color: #667eea;
 }
 
-/* ==================== 响应式 ==================== */
+/* 响应式 */
 @media (max-width: 768px) {
     .leaderboard-header {
         flex-wrap: wrap;
@@ -707,6 +707,174 @@ onMounted(() => {
 
     .rank-item .score {
         font-size: 18px;
+    }
+}
+
+/* 移动端小屏幕适配 */
+@media (max-width: 480px) {
+    .leaderboard {
+        padding: 12px;
+        padding-bottom: 80px;
+    }
+
+    .leaderboard-header {
+        padding: 12px;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    .title-icon {
+        font-size: 20px;
+    }
+
+    .title {
+        font-size: 16px;
+    }
+
+    .my-rank-card {
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+
+    .my-rank-badge {
+        font-size: 12px;
+        margin-bottom: 10px;
+    }
+
+    .badge-icon {
+        font-size: 16px;
+    }
+
+    .rank-value {
+        font-size: 36px;
+    }
+
+    .rank-label {
+        font-size: 14px;
+    }
+
+    .rank-stats {
+        font-size: 14px;
+    }
+
+    .medal-icon {
+        font-size: 24px;
+    }
+
+    .game-selector {
+        gap: 6px;
+        margin-bottom: 14px;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+    }
+
+    .game-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+        flex-shrink: 0;
+    }
+
+    .game-icon {
+        font-size: 16px;
+    }
+
+    .game-name {
+        white-space: nowrap;
+    }
+
+    .rank-type-selector {
+        gap: 4px;
+        padding: 3px;
+        margin-bottom: 16px;
+    }
+
+    .rank-type-btn {
+        padding: 8px 14px;
+        font-size: 12px;
+    }
+
+    .top-three {
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .top-card {
+        padding: 16px;
+    }
+
+    .medal {
+        font-size: 36px;
+    }
+
+    .top-card .avatar {
+        width: 60px;
+        height: 60px;
+    }
+
+    .rank-badge {
+        width: 22px;
+        height: 22px;
+        font-size: 12px;
+    }
+
+    .top-card .username {
+        font-size: 15px;
+    }
+
+    .top-card .score {
+        font-size: 20px;
+    }
+
+    .top-card .games-count {
+        font-size: 11px;
+    }
+
+    .rank-list {
+        gap: 8px;
+    }
+
+    .rank-item {
+        padding: 10px;
+        gap: 10px;
+    }
+
+    .rank-item .rank-number {
+        min-width: 26px;
+        font-size: 14px;
+    }
+
+    .rank-item .avatar {
+        width: 36px;
+        height: 36px;
+    }
+
+    .rank-item .username {
+        font-size: 14px;
+    }
+
+    .rank-item .games-count {
+        font-size: 11px;
+    }
+
+    .rank-item .score {
+        font-size: 16px;
+    }
+
+    .current-user-icon {
+        font-size: 20px;
+    }
+
+    .empty-icon {
+        font-size: 48px;
+    }
+
+    .empty-state {
+        padding: 40px 16px;
+    }
+
+    .empty-state p {
+        font-size: 14px;
     }
 }
 </style>

@@ -217,7 +217,7 @@ watch(mode, () => {
   max-width: 360px;
 }
 
-/* 响应式 - 小屏幕隐藏动画区域 */
+/* 响应式 - 平板适配 */
 @media (max-width: 900px) {
   .animation-section {
     display: none;
@@ -226,6 +226,46 @@ watch(mode, () => {
   .form-section {
     flex: 1;
     padding: 30px 20px;
+  }
+}
+
+/* 响应式 - 手机端适配 */
+@media (max-width: 480px) {
+  .form-section {
+    padding: 24px 16px;
+    justify-content: flex-start;
+    padding-top: 60px;
+  }
+
+  .logo-icon {
+    font-size: 2rem;
+    margin-bottom: 16px;
+  }
+
+  .welcome-title {
+    font-size: 1.5rem;
+  }
+
+  .welcome-subtitle {
+    font-size: 0.85rem;
+    margin-bottom: 24px;
+  }
+
+  .mode-tabs {
+    width: 100%;
+    max-width: 360px;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .tab-btn {
+    flex: 1;
+    padding: 10px 20px;
+    font-size: 0.9rem;
+  }
+
+  .form-container {
+    max-width: 100%;
   }
 }
 

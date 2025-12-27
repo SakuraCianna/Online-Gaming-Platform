@@ -1200,6 +1200,185 @@ function formatTime(time) {
   }
 }
 
+/* 移动端小屏幕适配 */
+@media (max-width: 480px) {
+  .friends-container {
+    padding: 12px;
+    padding-bottom: 80px;
+  }
+
+  .page-header {
+    gap: 12px;
+  }
+
+  .page-header h2 {
+    font-size: 20px;
+    text-align: center;
+  }
+
+  .friend-search-box {
+    margin: 0;
+    width: 100%;
+  }
+
+  .friend-search-input {
+    min-width: auto;
+    width: 100%;
+  }
+
+  .add-friend-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+  }
+
+  .friend-item {
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+
+  .friend-info {
+    gap: 12px;
+  }
+
+  .avatar {
+    width: 50px;
+    height: 50px;
+  }
+
+  .friend-details {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .friend-name {
+    font-size: 16px;
+  }
+
+  .friend-level,
+  .status-text {
+    font-size: 12px;
+  }
+
+  .friend-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .action-btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 10px;
+    font-size: 12px;
+    margin-right: 0;
+  }
+
+  .btn-label {
+    display: none;
+  }
+
+  .pagination {
+    margin-top: 16px;
+    padding-top: 12px;
+  }
+
+  .page-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* 模态框适配 */
+  .modal-overlay {
+    padding-top: 60px;
+  }
+
+  .modal-content {
+    margin: 0 12px;
+    max-height: 85vh;
+  }
+
+  .modal-header {
+    padding: 16px;
+  }
+
+  .modal-header h3 {
+    font-size: 16px;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  .search-section {
+    flex-direction: column;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .search-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+  }
+
+  /* 聊天模态框适配 */
+  .chat-modal {
+    width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  .chat-title-name {
+    font-size: 16px;
+  }
+
+  .chat-title-status {
+    font-size: 12px;
+  }
+
+  .chat-message-wrapper {
+    max-width: 90%;
+  }
+
+  .chat-message {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .chat-footer {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .message-input {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .send-btn {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .empty-state h3 {
+    font-size: 18px;
+  }
+
+  .empty-state p {
+    font-size: 13px;
+  }
+
+  .primary-btn {
+    padding: 10px 20px;
+    font-size: 13px;
+  }
+}
+
 .friend-search-box {
   display: flex;
   align-items: center;

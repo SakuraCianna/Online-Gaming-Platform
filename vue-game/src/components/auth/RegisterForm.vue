@@ -96,6 +96,9 @@ const validate = () => {
   return valid
 }
 
+// 当前操作类型：'register' 或 'sendCode'
+const currentAction = ref('register')
+
 // hCaptcha 相关
 const renderHcaptcha = () => {
   nextTick(() => {
@@ -116,7 +119,12 @@ const renderHcaptcha = () => {
         size: 'invisible',
         callback: (token) => {
           hcaptchaToken.value = token
-          submitRegister()
+          // 根据操作类型执行不同逻辑
+          if (currentAction.value === 'sendCode') {
+            doSendCode()
+          } else {
+            submitRegister()
+          }
         },
         'expired-callback': () => {
           hcaptchaToken.value = ''
@@ -168,14 +176,34 @@ onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
 })
 
-// 发送验证码
-const sendVerificationCode = async () => {
+// 发送验证码（先触发人机验证）
+const sendVerificationCode = () => {
   if (!form.email.trim()) {
     ElMessage.warning('请先输入QQ邮箱')
     return
   }
   if (!validateEmail(form.email)) {
     ElMessage.warning('请输入有效的QQ邮箱地址')
+    return
+  }
+  if (!hcaptchaLoaded.value || !globalThis.hcaptcha || hcaptchaWidgetId.value === null) {
+    ElMessage.warning('人机验证尚未加载完成，请稍后重试')
+    return
+  }
+
+  currentAction.value = 'sendCode'
+  hcaptchaToken.value = ''
+  try {
+    globalThis.hcaptcha.execute(hcaptchaWidgetId.value)
+  } catch (e) {
+    ElMessage.error('启动人机验证失败，请刷新页面重试')
+  }
+}
+
+// 实际发送验证码
+const doSendCode = async () => {
+  if (!hcaptchaToken.value) {
+    ElMessage.warning('人机验证失败，请重试')
     return
   }
 
@@ -190,7 +218,10 @@ const sendVerificationCode = async () => {
   }, 1000)
 
   try {
-    const response = await request.post('/email/sendCode', { email: form.email }, { timeout: 30000 })
+    const response = await request.post('/email/sendCode', { 
+      email: form.email,
+      hcaptchaToken: hcaptchaToken.value
+    }, { timeout: 30000 })
     if (response.data.success) {
       ElMessage.success('验证码已发送到您的邮箱')
     } else {
@@ -200,11 +231,16 @@ const sendVerificationCode = async () => {
       ElMessage.error(response.data.message || '发送验证码失败')
     }
   } catch (error) {
+    isCodeSent.value = false
+    countdown.value = 0
+    if (countdownTimer) clearInterval(countdownTimer)
     ElMessage.error('发送验证码失败，请稍后重试')
+  } finally {
+    resetHcaptcha()
   }
 }
 
-// 触发人机验证
+// 触发人机验证（注册）
 const handleSubmit = () => {
   if (!validate()) return
 
@@ -213,6 +249,7 @@ const handleSubmit = () => {
     return
   }
 
+  currentAction.value = 'register'
   hcaptchaToken.value = ''
   try {
     globalThis.hcaptcha.execute(hcaptchaWidgetId.value)
@@ -466,5 +503,40 @@ const togglePassword = () => {
 .submit-btn:disabled {
   background: #ccc;
   cursor: not-allowed;
+}
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+  .auth-form {
+    gap: 14px;
+  }
+
+  .form-label {
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+  }
+
+  .form-input {
+    padding: 12px 14px;
+    font-size: 16px; /* 防止 iOS 自动缩放 */
+    border-radius: 6px;
+  }
+
+  .verification-wrapper {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .send-code-btn {
+    width: 100%;
+    padding: 12px;
+    min-width: auto;
+  }
+
+  .submit-btn {
+    padding: 12px;
+    font-size: 0.95rem;
+    margin-top: 4px;
+  }
 }
 </style>

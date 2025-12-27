@@ -1,10 +1,7 @@
 package com.game.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.component.RedisKeyManager;
-import com.game.component.OllamaUtil;
-import com.game.config.AiModelConfig;
 import com.game.entity.GameRoom;
 import com.game.entity.Gomoku;
 import com.game.entity.RoomPlayer;
@@ -35,63 +32,6 @@ import java.util.concurrent.TimeUnit;
 @Transactional
 @RequiredArgsConstructor
 public class GomokuService {
-    private static final String GOMOKU_PROMPT = """
-            你是一个专业的五子棋AI大师，拥有超强的棋局分析能力。
-
-            【游戏规则】
-            - 棋盘大小：17x17（坐标从0到16）
-            - 胜利条件：横、竖、斜任意方向连成5子即获胜
-            - 棋子颜色：X代表你的棋子，O代表对手棋子，.代表空位
-
-            【关键棋型识别】
-            1. **五连**：XXXXX（立即获胜）
-            2. **活四**：.XXXX.（下一步必胜）
-            3. **冲四**：OXXXX.或.XXXXO（一端被堵）
-            4. **活三**：.XXX..或..XXX.（可形成活四）
-            5. **眠三**：OXXX..或.XXXO（一端被堵）
-
-            【决策优先级】（必须严格执行）
-            **第一优先：立即获胜**
-               - 如果你有五连机会，立即落子取胜
-               - 检查所有方向：横、竖、左斜、右斜
-
-            **第二优先：防守对手四连**
-               - 如果对手有活四（.OOOO.），你下一步不防守就会输！
-               - 如果对手有冲四（OOOOO.或.OOOOO），必须堵住缺口！
-               - 这是生死关头，绝对不能忽视！
-
-            **第三优先：创造活四**
-               - 寻找能形成.XXXX.的位置
-               - 活四是必胜棋型
-
-            **第四优先：形成活三**
-               - 寻找能形成.XXX..的位置
-               - 为下一步的活四做准备
-
-            **第五优先：战略要地**
-               - 中心区域（8,8附近）
-               - 对手棋子附近（2格以内）
-               - 避免边角
-
-            【分析步骤】
-            1. 扫描全棋盘，标记所有X和O的连子
-            2. 检查是否有五连机会→有则立即下
-            3. 检查对手是否有四连→有则立即防守
-            4. 寻找形成活四的机会
-            5. 寻找形成活三的机会
-            6. 选择战略位置
-
-            【输出格式】
-            必须严格按照JSON格式返回，不要任何解释：
-            {"x": 列坐标, "y": 行坐标}
-
-            【注意事项】
-            - 坐标范围：0-16
-            - 必须落在空位（.）
-            - 防守四连比进攻更重要（防守失败=直接输）
-            - 仔细检查每个方向（横竖斜）
-            - 不要下在孤立位置
-            """;
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final GomokuMapper gomokuMapper;
@@ -99,7 +39,6 @@ public class GomokuService {
     private final RoomPlayerMapper roomPlayerMapper;
     private final ObjectMapper objectMapper;
     private final RedissonClient redissonClient;
-    private final OllamaUtil ollamaUtil;
     private final SimpMessagingTemplate messagingTemplate;
     private final RedisKeyManager redisKeyManager;
     private final ApplicationEventPublisher eventPublisher;
@@ -476,13 +415,6 @@ public class GomokuService {
         return result;
     }
 
-    private boolean isValidMove(int[][] board, int x, int y) {
-        if (x < 0 || x >= 17 || y < 0 || y >= 17) {
-            return false;
-        }
-        return board[y][x] == 0;
-    }
-
     private static final int BOARD_SIZE = 17;
     private static final int WIN_COUNT = 5;
     private static final int MAX_DEPTH = 4;
@@ -634,8 +566,52 @@ public class GomokuService {
         if (blockOpenFour != null)
             return blockOpenFour;
 
-        // 5. 使用MinMax算法
+        // 5. 检查自己是否能形成双活三（必胜棋型）
+        Map<String, Integer> myDoubleThree = findDoubleThreeMove(board, aiColor);
+        if (myDoubleThree != null)
+            return myDoubleThree;
+
+        // 6. 检查对方是否能形成双活三（必须防守）
+        Map<String, Integer> blockDoubleThree = findDoubleThreeMove(board, playerColor);
+        if (blockDoubleThree != null)
+            return blockDoubleThree;
+
+        // 7. 使用MinMax算法
         return findBestMoveWithMinMax(board, aiColor, playerColor);
+    }
+
+    /**
+     * 查找能形成双活三的位置（两个活三同时形成，必胜棋型）
+     */
+    private Map<String, Integer> findDoubleThreeMove(int[][] board, int color) {
+        int[][] directions = { { 0, 1 }, { 1, 0 }, { 1, 1 }, { 1, -1 } };
+        
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (board[r][c] != 0)
+                    continue;
+
+                int openThreeCount = 0;
+                
+                // 检查四个方向
+                for (int[] dir : directions) {
+                    board[r][c] = color;
+                    LineCount lineCount = countLineStonesAI(board, r, c, dir[0], dir[1], color);
+                    board[r][c] = 0;
+
+                    // 活三：3子 + 两端都开放
+                    if (lineCount.count == 3 && lineCount.openEnds == 2) {
+                        openThreeCount++;
+                    }
+                }
+
+                // 双活三：同时形成两个或以上活三
+                if (openThreeCount >= 2) {
+                    return Map.of("row", r, "col", c);
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -967,183 +943,4 @@ public class GomokuService {
         }
     }
 
-    @Deprecated
-    public Map<String, Object> AI_Move(Map<String, Object> request) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            // 处理board的类型转换
-            int[][] board;
-            Object boardObj = request.get("board");
-            if (boardObj instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<List<Integer>> boardList = (List<List<Integer>>) boardObj;
-                board = new int[boardList.size()][];
-                for (int i = 0; i < boardList.size(); i++) {
-                    List<Integer> row = boardList.get(i);
-                    board[i] = new int[row.size()];
-                    for (int j = 0; j < row.size(); j++) {
-                        board[i][j] = row.get(j);
-                    }
-                }
-            } else {
-                board = (int[][]) boardObj;
-            }
-
-            int aiColor = (int) request.get("aiColor");
-
-            // lastMove可能为null
-            PointVO lastMove = null;
-            if (request.get("lastMove") != null) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> lastMoveMap = (Map<String, Object>) request.get("lastMove");
-                lastMove = new PointVO();
-                lastMove.setX((int) lastMoveMap.get("x"));
-                lastMove.setY((int) lastMoveMap.get("y"));
-                lastMove.setColor((String) lastMoveMap.get("color"));
-                lastMove.setId(((Number) lastMoveMap.get("id")).longValue());
-            }
-
-            // 调用大模型获取AI落子
-            PointVO aiMove = getAIMoveFromOllama(board, aiColor, lastMove, result);
-            log.info("落子信息为:{}", aiMove);
-            // 验证AI返回的落子位置是否有效
-            if (!isValidMove(board, aiMove.getX(), aiMove.getY())) {
-                throw new BusinessException(4001, "AI返回了无效的落子位置: (" + aiMove.getX() + ", " + aiMove.getY() + ")");
-            }
-
-            result.put("success", true);
-            result.put("message", "计算下一步落子成功");
-            result.put("move", aiMove);
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BusinessException(500, "计算失败: " + e.getMessage());
-        }
-        return result;
-    }
-
-    @Deprecated
-    private PointVO getAIMoveFromOllama(int[][] board, int aiColor, PointVO lastMove, Map<String, Object> result) {
-        try {
-            // 构建用户提示词
-            StringBuilder userPrompt = new StringBuilder();
-            userPrompt.append("【当前棋盘状态】\n");
-            userPrompt.append(formatBoard(board, aiColor));
-            userPrompt.append("\n");
-
-            userPrompt.append("【你的颜色】");
-            userPrompt.append(aiColor == 1 ? "黑棋(X)" : "白棋(O)");
-            userPrompt.append("\n");
-
-            userPrompt.append("【对手颜色】");
-            userPrompt.append(aiColor == 1 ? "白棋(O)" : "黑棋(X)");
-            userPrompt.append("\n\n");
-
-            // 统计已占用位置
-            int occupiedCount = 0;
-            for (int y = 0; y < 17; y++) {
-                for (int x = 0; x < 17; x++) {
-                    if (board[y][x] != 0)
-                        occupiedCount++;
-                }
-            }
-
-            userPrompt.append("重要提示:\n");
-            userPrompt.append("- 当前棋盘已有 ").append(occupiedCount).append(" 个棋子\n");
-            userPrompt.append("- 你必须选择标记为'.'的空位（空位值为0）\n");
-            userPrompt.append("- X和O的位置已被占用，绝对不能选择！\n");
-            userPrompt.append("- 如果你返回已占用位置，你的落子将被判定为无效并导致游戏异常！\n\n");
-
-            if (lastMove != null) {
-                userPrompt.append("【对手最后一步】");
-                userPrompt.append("位置: (").append(lastMove.getX())
-                        .append(", ").append(lastMove.getY()).append(")");
-                userPrompt.append("，该位置已被占用\n\n");
-            } else {
-                userPrompt.append("【提示】这是开局，棋盘为空\n\n");
-            }
-
-            userPrompt.append("现在请仔细观察棋盘，只在标记为'.'的位置中选择最佳落子点，直接返回JSON格式坐标：");
-
-            // 调用Ollama
-            String aiResponse = ollamaUtil.advancedChat(
-                    GOMOKU_PROMPT,
-                    userPrompt.toString(),
-                    AiModelConfig.MODEL_QWEN_7B_INSTRUCT,
-                    0.15);
-
-            result.put("aiResponse", aiResponse);
-            result.put("model", AiModelConfig.MODEL_QWEN_7B_INSTRUCT);
-            result.put("aiEngine", "Ollama");
-
-            // 解析AI返回的JSON结果
-            PointVO aiMove = parseAIResponse(aiResponse);
-
-            // 设置AI落子的颜色和ID
-            aiMove.setColor(aiColor == 1 ? "black" : "white");
-            aiMove.setId(0L);
-
-            return aiMove;
-        } catch (Exception e) {
-            throw new BusinessException(500, "获取Ollama AI落子失败: " + e.getMessage());
-        }
-    }
-
-    @Deprecated
-    private String formatBoard(int[][] board, int aiColor) {
-        char aiSymbol = (aiColor == 1) ? 'X' : 'O';
-        char opponentSymbol = (aiColor == 1) ? 'O' : 'X';
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("   ");
-        for (int i = 0; i < 17; i++) {
-            sb.append(String.format("%2d", i));
-        }
-        sb.append("\n");
-
-        // 分隔线
-        sb.append("   ");
-        sb.append("--".repeat(17));
-        sb.append("\n");
-
-        // 棋盘内容
-        for (int y = 0; y < 17; y++) {
-            sb.append(String.format("%2d|", y));
-            for (int x = 0; x < 17; x++) {
-                char cellChar = switch (board[y][x]) {
-                    case 1 -> (aiColor == 1) ? aiSymbol : opponentSymbol;
-                    case 2 -> (aiColor == 2) ? aiSymbol : opponentSymbol;
-                    default -> '.';
-                };
-                sb.append(String.format(" %c", cellChar));
-            }
-            sb.append("\n");
-        }
-        return sb.toString();
-    }
-
-    @Deprecated
-    private PointVO parseAIResponse(String aiResponse) {
-        try {
-            String cleanedResponse = aiResponse.trim();
-
-            if (cleanedResponse.contains("```json")) {
-                cleanedResponse = cleanedResponse.replace("```json", "").replace("```", "").trim();
-            }
-
-            Map<String, Object> responseMap = objectMapper.readValue(
-                    cleanedResponse,
-                    new TypeReference<>() {
-                    });
-
-            PointVO point = new PointVO();
-            point.setX(((Number) responseMap.get("x")).intValue());
-            point.setY(((Number) responseMap.get("y")).intValue());
-
-            return point;
-
-        } catch (Exception e) {
-            throw new BusinessException(500, "解析AI响应失败: " + e.getMessage() + "，响应内容: " + aiResponse);
-        }
-    }
 }

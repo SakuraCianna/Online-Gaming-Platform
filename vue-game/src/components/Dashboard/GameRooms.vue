@@ -899,7 +899,7 @@ const formatTime = (time) => {
     }
 
     .statistics-bar {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
     }
 
     .action-bar {
@@ -925,6 +925,150 @@ const formatTime = (time) => {
 
     .rooms-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+/* 移动端小屏幕适配 */
+@media (max-width: 480px) {
+    .game-rooms {
+        padding: 12px;
+        padding-bottom: 80px;
+    }
+
+    .statistics-bar {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .stat-card {
+        padding: 14px;
+        gap: 10px;
+    }
+
+    .stat-icon {
+        font-size: 1.8rem;
+        width: 44px;
+        height: 44px;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+    }
+
+    .action-bar {
+        padding: 14px;
+        gap: 12px;
+    }
+
+    .search-box {
+        padding: 8px 12px;
+    }
+
+    .search-input {
+        font-size: 14px;
+    }
+
+    .filter-group {
+        width: 100%;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+    }
+
+    .filter-btn {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .filter-btn .btn-icon {
+        font-size: 1rem;
+    }
+
+    .right-actions {
+        gap: 8px;
+    }
+
+    .action-btn {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+    }
+
+    .room-card {
+        border-radius: 12px;
+    }
+
+    .room-header {
+        padding: 12px;
+    }
+
+    .game-icon {
+        font-size: 1.2rem;
+    }
+
+    .game-name {
+        font-size: 0.9rem;
+    }
+
+    .badge {
+        padding: 3px 8px;
+        font-size: 0.7rem;
+    }
+
+    .room-body {
+        padding: 14px;
+    }
+
+    .room-code-section {
+        padding: 10px;
+    }
+
+    .room-code {
+        font-size: 1.1rem;
+    }
+
+    .creator-avatar {
+        width: 40px;
+        height: 40px;
+    }
+
+    .creator-name {
+        font-size: 0.9rem;
+    }
+
+    .meta-item {
+        font-size: 0.8rem;
+    }
+
+    .room-footer {
+        padding: 0 14px 14px;
+    }
+
+    .join-btn {
+        padding: 10px;
+        font-size: 0.9rem;
+    }
+
+    .empty-icon {
+        font-size: 3.5rem;
+    }
+
+    .empty-state h3 {
+        font-size: 1.2rem;
+    }
+
+    .empty-state p {
+        font-size: 0.9rem;
+    }
+
+    .create-room-btn {
+        padding: 10px 24px;
+        font-size: 0.9rem;
     }
 }
 </style>

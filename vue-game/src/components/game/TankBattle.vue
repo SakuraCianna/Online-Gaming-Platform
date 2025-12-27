@@ -1149,7 +1149,7 @@ onBeforeUnmount(async () => {
 </template>
 
 <style scoped>
-/* ===== 全局容器 ===== */
+/* 全局容器 */
 .tank-battle-lobby {
     height: 100vh;
     width: 100vw;
@@ -1163,7 +1163,7 @@ onBeforeUnmount(async () => {
     transition: opacity 0.5s ease-in;
 }
 
-/* ===== 装饰背景 ===== */
+/* 装饰背景 */
 .bg-decoration {
     position: absolute;
     top: 0;
@@ -1221,7 +1221,7 @@ onBeforeUnmount(async () => {
     }
 }
 
-/* ===== 顶部导航栏 ===== */
+/* 顶部导航栏 */
 .lobby-header {
     position: relative;
     z-index: 10;
@@ -1350,7 +1350,7 @@ onBeforeUnmount(async () => {
     font-size: 12px;
 }
 
-/* ===== 主内容区 ===== */
+/* 主内容区 */
 .lobby-content {
     position: relative;
     z-index: 1;
@@ -1362,7 +1362,7 @@ onBeforeUnmount(async () => {
     overflow: hidden;
 }
 
-/* ===== 左侧配置面板 ===== */
+/* 左侧配置面板 */
 .config-panel {
     display: flex;
     flex-direction: column;
@@ -1604,7 +1604,7 @@ onBeforeUnmount(async () => {
     border: 2px dashed rgba(148, 163, 184, 0.3);
 }
 
-/* ===== 中间玩家区域 ===== */
+/* 中间玩家区域 */
 .players-area {
     display: flex;
     flex-direction: column;
@@ -2136,7 +2136,7 @@ onBeforeUnmount(async () => {
     opacity: 0.6;
 }
 
-/* ===== 右侧统计面板 ===== */
+/* 右侧统计面板 */
 .stats-panel {
     display: flex;
     flex-direction: column;
@@ -2191,7 +2191,7 @@ onBeforeUnmount(async () => {
     line-height: 1.4;
 }
 
-/* ===== 图标样式 ===== */
+/* 图标样式 */
 .iconify,
 svg.iconify {
     display: inline-block;
@@ -2215,7 +2215,7 @@ button svg.iconify {
     color: inherit;
 }
 
-/* ===== 响应式 ===== */
+/* 响应式 */
 @media (max-width: 1400px) {
     .lobby-content {
         grid-template-columns: 260px 1fr 280px;
@@ -2239,17 +2239,489 @@ button svg.iconify {
 }
 
 @media (max-width: 768px) {
+    .tank-battle-lobby {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+        padding-bottom: 80px;
+    }
+
     .lobby-header {
         padding: 12px 16px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .btn-back {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+
+    .btn-back span {
+        display: none;
+    }
+
+    .room-badge {
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+
+    .btn-rules {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+
+    .btn-rules span {
+        display: none;
+    }
+
+    .rules-dropdown {
+        width: 240px;
+        right: -50px;
     }
 
     .lobby-content {
-        padding: 16px;
+        padding: 12px;
         gap: 12px;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr;
+    }
+
+    .config-panel {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .panel-card {
+        padding: 14px;
+    }
+
+    .card-title {
+        font-size: 14px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+    }
+
+    .mode-chip {
+        padding: 10px;
+    }
+
+    .mode-name {
+        font-size: 12px;
+    }
+
+    .mode-info {
+        font-size: 10px;
+    }
+
+    .friends-panel {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .friend-card {
+        padding: 10px;
+        gap: 10px;
+    }
+
+    .friend-img {
+        width: 36px;
+        height: 36px;
+    }
+
+    .friend-username {
+        font-size: 13px;
+    }
+
+    .friend-state {
+        font-size: 11px;
+    }
+
+    .btn-invite {
+        width: 28px;
+        height: 28px;
+    }
+
+    .players-area {
+        gap: 12px;
+    }
+
+    .area-header h2 {
+        font-size: 18px;
+    }
+
+    .player-count {
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    .team-mode-hint {
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .team-hint {
+        padding: 8px 12px;
+        font-size: 12px;
     }
 
     .seats-layout {
         grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .seats-layout.mode-2v2 {
+        gap: 12px;
+    }
+
+    .seats-layout.mode-2v2::before {
+        font-size: 24px;
+        padding: 8px 16px;
+    }
+
+    .seats-layout.mode-2v2::after {
+        display: none;
+    }
+
+    .player-slot {
+        padding: 14px;
+        min-height: 120px;
+        height: auto;
+        border-radius: 14px;
+    }
+
+    .player-slot.team-a::after,
+    .player-slot.team-b::after {
+        font-size: 10px;
+        padding: 4px 8px;
+        top: 8px;
+        left: 8px;
+    }
+
+    .slot-content {
+        gap: 14px;
+    }
+
+    .player-img {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+    }
+
+    .player-username {
+        font-size: 16px;
+    }
+
+    .player-status {
+        font-size: 12px;
+    }
+
+    .player-badge {
+        font-size: 10px;
+        padding: 3px 8px;
+        bottom: -6px;
+    }
+
+    .btn-switch-team {
+        width: 28px;
+        height: 28px;
+    }
+
+    .btn-remove {
+        width: 24px;
+        height: 24px;
+    }
+
+    .slot-empty {
+        gap: 10px;
+    }
+
+    .slot-empty > span {
+        font-size: 12px;
+    }
+
+    .btn-add-ai {
+        padding: 8px 16px;
+        font-size: 12px;
+    }
+
+    .btn-start-game {
+        padding: 14px;
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .tank-battle-lobby {
+        padding-bottom: 80px;
+    }
+
+    .lobby-header {
+        padding: 10px 12px;
+    }
+
+    .btn-back,
+    .btn-rules {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    .room-badge {
+        padding: 6px 12px;
+        font-size: 12px;
+        gap: 6px;
+    }
+
+    .rules-dropdown {
+        width: 220px;
+        padding: 12px;
+        right: -80px;
+    }
+
+    .rules-title {
+        font-size: 13px;
+    }
+
+    .rules-grid {
+        gap: 8px;
+    }
+
+    .rule-item {
+        padding: 6px;
+        font-size: 11px;
+    }
+
+    .lobby-content {
+        padding: 8px;
+        gap: 10px;
+    }
+
+    .panel-card {
+        padding: 12px;
+        border-radius: 12px;
+    }
+
+    .card-title {
+        font-size: 13px;
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+    }
+
+    .mode-chip {
+        padding: 8px;
+        border-radius: 8px;
+    }
+
+    .mode-name {
+        font-size: 11px;
+    }
+
+    .mode-info {
+        font-size: 9px;
+    }
+
+    .map-info {
+        margin-top: 10px;
+    }
+
+    .selector-label {
+        font-size: 11px;
+    }
+
+    .map-display {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .map-tip {
+        font-size: 10px;
+    }
+
+    .friends-panel {
+        max-height: 160px;
+    }
+
+    .friend-card {
+        padding: 8px;
+        gap: 8px;
+        border-radius: 10px;
+    }
+
+    .friend-img {
+        width: 32px;
+        height: 32px;
+        border-width: 2px;
+    }
+
+    .friend-username {
+        font-size: 12px;
+    }
+
+    .friend-state {
+        font-size: 10px;
+    }
+
+    .btn-invite {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+    }
+
+    .no-data {
+        padding: 24px 8px;
+        font-size: 12px;
+    }
+
+    .area-header {
+        padding: 0 4px;
+    }
+
+    .area-header h2 {
+        font-size: 16px;
+    }
+
+    .player-count {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+
+    .team-hint {
+        padding: 6px 10px;
+        font-size: 11px;
+        border-radius: 8px;
+    }
+
+    .player-slot {
+        padding: 12px;
+        min-height: 100px;
+        border-radius: 12px;
+        border-width: 2px;
+    }
+
+    .player-slot.team-a::after,
+    .player-slot.team-b::after {
+        font-size: 9px;
+        padding: 3px 6px;
+        border-radius: 8px;
+    }
+
+    .slot-content {
+        gap: 12px;
+    }
+
+    .player-img {
+        width: 50px;
+        height: 50px;
+        border-radius: 10px;
+        border-width: 2px;
+    }
+
+    .player-username {
+        font-size: 14px;
+    }
+
+    .player-status {
+        font-size: 11px;
+        gap: 6px;
+    }
+
+    .status-dot {
+        width: 6px;
+        height: 6px;
+    }
+
+    .player-badge {
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 8px;
+    }
+
+    .btn-switch-team {
+        width: 26px;
+        height: 26px;
+    }
+
+    .btn-remove {
+        width: 22px;
+        height: 22px;
+    }
+
+    .slot-empty > .iconify {
+        width: 28px;
+        height: 28px;
+    }
+
+    .slot-empty > span {
+        font-size: 11px;
+    }
+
+    .btn-add-ai {
+        padding: 6px 12px;
+        font-size: 11px;
+        border-radius: 8px;
+    }
+
+    .btn-start-game {
+        padding: 12px;
+        font-size: 13px;
+        border-radius: 10px;
+    }
+
+    .switching-text {
+        font-size: 16px;
+    }
+
+    .switching-hint {
+        font-size: 12px;
+    }
+
+    .switching-content > .iconify {
+        width: 36px;
+        height: 36px;
+    }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+    .btn-back:hover,
+    .btn-rules:hover {
+        transform: none;
+    }
+
+    .mode-chip:hover {
+        transform: none;
+    }
+
+    .friend-card:hover {
+        transform: none;
+    }
+
+    .btn-invite:hover:not(:disabled) {
+        transform: none;
+    }
+
+    .player-slot:hover {
+        transform: none;
+    }
+
+    .slot-content:hover .player-img {
+        transform: none;
+    }
+
+    .btn-switch-team:hover:not(:disabled) {
+        transform: none;
+    }
+
+    .btn-remove:hover:not(:disabled) {
+        transform: none;
+    }
+
+    .btn-add-ai:hover:not(:disabled) {
+        transform: none;
+    }
+
+    .btn-start-game:hover:not(:disabled) {
+        transform: none;
     }
 }
 </style>

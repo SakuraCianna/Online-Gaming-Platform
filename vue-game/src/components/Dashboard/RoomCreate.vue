@@ -481,28 +481,127 @@ h2::after {
 }
 
 @media (max-width: 480px) {
+  .room-create-wrapper {
+    padding: 16px;
+    min-height: 100vh;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+
   .room-create-container {
-    padding: 30px 24px;
+    padding: 24px 20px;
+    border-radius: 16px;
   }
 
   .back-btn {
     position: relative;
     top: 0;
     left: 0;
-    margin-bottom: 15px;
+    margin-bottom: 16px;
     width: 100%;
     justify-content: center;
+    padding: 10px 16px;
+    font-size: 0.85rem;
   }
 
-  .code-input {
-    width: 100px;
-    padding: 12px 16px;
-    font-size: 1.2rem;
+  .back-btn svg {
+    width: 20px;
+    height: 20px;
   }
 
   h2 {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     margin-top: 0;
+    margin-bottom: 24px;
+    padding-bottom: 10px;
+  }
+
+  h2::after {
+    width: 50px;
+    height: 3px;
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .label-text {
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+  }
+
+  .checkbox-container {
+    padding-left: 32px;
+    font-size: 14px;
+  }
+
+  .checkmark {
+    width: 22px;
+    height: 22px;
+  }
+
+  .checkbox-container .checkmark:after {
+    left: 6px;
+    top: 2px;
+    width: 5px;
+    height: 10px;
+  }
+
+  .code-input-group {
+    flex-direction: row;
+    gap: 10px;
+  }
+
+  .code-input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    padding: 12px 14px;
+    font-size: 1.2rem;
+    letter-spacing: 3px;
+  }
+
+  .refresh-btn {
+    margin-left: 0;
+    padding: 12px;
+    flex-shrink: 0;
+  }
+
+  .refresh-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .board-size-display {
+    padding: 10px 20px;
+    font-size: 0.95rem;
+  }
+
+  .hint {
+    font-size: 0.8rem;
+    margin-top: 6px;
+  }
+
+  .create-btn {
+    padding: 14px 20px;
+    font-size: 1rem;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .create-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border-width: 4px;
+  }
+
+  .loading-overlay p {
+    font-size: 14px;
   }
 }
 </style>

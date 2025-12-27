@@ -324,4 +324,100 @@ defineExpose({
 .fade-leave-to {
   opacity: 0;
 }
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+  .invite-overlay {
+    padding: 16px;
+    align-items: flex-end;
+  }
+
+  .invite-dialog {
+    width: 100%;
+    max-width: none;
+    border-radius: 20px 20px 0 0;
+    animation: slideUpMobile 0.3s ease-out;
+  }
+
+  @keyframes slideUpMobile {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .invite-header {
+    padding: 24px 20px;
+  }
+
+  .invite-icon {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 10px;
+  }
+
+  .invite-header h3 {
+    font-size: 1.3rem;
+  }
+
+  .invite-body {
+    padding: 24px 20px;
+  }
+
+  .inviter-info {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .inviter-avatar {
+    width: 56px;
+    height: 56px;
+  }
+
+  .invite-message {
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .game-badge {
+    padding: 3px 10px;
+    font-size: 0.85rem;
+    display: inline-block;
+    margin-top: 4px;
+  }
+
+  .room-info {
+    padding: 14px;
+  }
+
+  .info-item {
+    font-size: 0.9rem;
+    justify-content: center;
+  }
+
+  .info-item strong {
+    font-size: 1rem;
+  }
+
+  .invite-actions {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 20px 24px 20px;
+  }
+
+  .btn {
+    padding: 14px 16px;
+    font-size: 0.95rem;
+  }
+
+  .btn-accept {
+    order: -1;
+  }
+}
 </style>

@@ -1,0 +1,29 @@
+# 核心框架
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# HTTP客户端
+httpx==0.28.1
+
+# 工具
+python-dotenv==1.0.1
+
+# AI/ML - 坦克大战强化学习
+torch==2.5.1+cu124
+torchvision==0.20.1+cu124
+
+# 数值计算 (stable-baselines3要求<2.0)
+numpy>=1.21.0,<2.0
+
+# 强化学习
+gymnasium==1.0.0
+stable-baselines3==2.4.1
+
+# 机器学习 
+scikit-learn==1.6.0
+
+# 深度学习/NLP 
+transformers==4.47.1
+accelerate==1.2.1

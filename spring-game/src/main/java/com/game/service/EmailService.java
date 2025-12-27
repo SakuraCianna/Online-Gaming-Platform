@@ -1,10 +1,12 @@
 package com.game.service;
 
+import com.game.component.RedisKeyManager;
 import com.game.exception.BusinessException;
 import com.game.mapper.UserMapper;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -24,9 +26,19 @@ public class EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
     private final UserMapper userMapper;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final RedisKeyManager redisKeyManager;
 
     public Map<String, Object> sendCode(String to) {
         try {
+            // 验证该邮箱是否存在于redis,防止恶意请求
+            String key = redisKeyManager.buildEmailLimitKey(to);
+            if (stringRedisTemplate.hasKey(key)) {
+                throw new BusinessException(400, "请勿频繁发送验证码");
+            }
+            // 把该邮箱加入redis,防止恶意请求
+            stringRedisTemplate.opsForValue().set(key, "1", 2, java.util.concurrent.TimeUnit.MINUTES);
+
             // 参数校验
             validateEmail(to);
             String code = generateCode();

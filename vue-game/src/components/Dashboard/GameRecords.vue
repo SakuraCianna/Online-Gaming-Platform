@@ -1023,4 +1023,141 @@ async function loadRecordsByGame(gameType) {
         grid-template-columns: 1fr;
     }
 }
+
+/* 移动端小屏幕适配 */
+@media (max-width: 480px) {
+    .game-records {
+        padding: 12px;
+        padding-bottom: 80px;
+    }
+
+    .records-header {
+        padding: 12px;
+        gap: 8px;
+    }
+
+    .title-icon {
+        font-size: 20px;
+    }
+
+    .title {
+        font-size: 16px;
+    }
+
+    .export-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+        top: 10px;
+        right: 10px;
+    }
+
+    .export-btn span {
+        display: none;
+    }
+
+    .statistics-cards {
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .controls {
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .tabs {
+        gap: 6px;
+        padding-bottom: 4px;
+    }
+
+    .tab-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+    .tab-icon {
+        font-size: 14px;
+    }
+
+    .right-controls {
+        gap: 8px;
+    }
+
+    .filter-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .sort-controls {
+        padding: 6px 10px;
+    }
+
+    .sort-select {
+        font-size: 12px;
+    }
+
+    .sort-order-btn {
+        width: 24px;
+        height: 24px;
+    }
+
+    .records-list {
+        gap: 12px;
+    }
+
+    .record-card {
+        padding: 12px;
+        border-radius: 10px;
+    }
+
+    .record-header {
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+    }
+
+    .game-icon {
+        font-size: 20px;
+    }
+
+    .game-name {
+        font-size: 14px;
+    }
+
+    .status-badge {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+
+    .record-body {
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .data-item {
+        padding: 6px;
+        font-size: 12px;
+    }
+
+    .data-icon {
+        font-size: 14px;
+    }
+
+    .record-footer {
+        padding-top: 8px;
+        font-size: 11px;
+    }
+
+    .empty-icon {
+        font-size: 48px;
+    }
+
+    .empty-state {
+        padding: 40px 16px;
+    }
+
+    .empty-state p {
+        font-size: 14px;
+    }
+}
 </style>

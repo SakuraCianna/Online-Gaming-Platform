@@ -260,4 +260,68 @@ onMounted(() => {
     padding: 3px 8px;
   }
 }
+
+/* 移动端小屏幕适配 */
+@media (max-width: 480px) {
+  .games-center {
+    padding: 16px 12px;
+    padding-bottom: 80px; /* 为底部导航留空间 */
+  }
+
+  .page-header {
+    margin-bottom: 20px;
+  }
+
+  .page-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .game-section {
+    margin-bottom: 28px;
+  }
+
+  .section-title {
+    font-size: 1rem;
+    margin-bottom: 14px;
+  }
+
+  .games-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .game-card {
+    padding: 16px 12px;
+    border-radius: 10px;
+  }
+
+  .card-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+  }
+
+  .card-title {
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+  }
+
+  .card-desc {
+    font-size: 0.75rem;
+    margin-bottom: 14px;
+    line-height: 1.4;
+  }
+
+  .play-btn {
+    padding: 8px;
+    font-size: 0.8rem;
+    border-radius: 6px;
+  }
+
+  .online-badge {
+    top: 8px;
+    right: 8px;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+  }
+}
 </style>

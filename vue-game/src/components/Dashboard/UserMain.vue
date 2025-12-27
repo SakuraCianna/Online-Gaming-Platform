@@ -47,7 +47,14 @@ onMounted(() => {
 @media (max-width: 768px) {
   .user-main {
     border-radius: 10px;
-    margin: 10px;
+    margin: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-main {
+    border-radius: 0;
   }
 }
 </style>

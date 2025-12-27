@@ -658,6 +658,50 @@ function handleKeydown(e) {
   }
 }
 
+// 触摸滑动支持
+let touchStartX = 0
+let touchStartY = 0
+let touchEndX = 0
+let touchEndY = 0
+
+function handleTouchStart(e) {
+  if (stage.value !== 'game') return
+  touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+}
+
+function handleTouchEnd(e) {
+  if (stage.value !== 'game') return
+  if (gameOver.value || gameWin.value) return
+  
+  touchEndX = e.changedTouches[0].clientX
+  touchEndY = e.changedTouches[0].clientY
+  
+  const deltaX = touchEndX - touchStartX
+  const deltaY = touchEndY - touchStartY
+  const minSwipeDistance = 30
+  
+  if (Math.abs(deltaX) > Math.abs(deltaY)) {
+    // 水平滑动
+    if (Math.abs(deltaX) > minSwipeDistance) {
+      if (deltaX > 0) {
+        move('right')
+      } else {
+        move('left')
+      }
+    }
+  } else {
+    // 垂直滑动
+    if (Math.abs(deltaY) > minSwipeDistance) {
+      if (deltaY > 0) {
+        move('down')
+      } else {
+        move('up')
+      }
+    }
+  }
+}
+
 // 不保存并退出
 async function exitWithoutSave() {
   stopTimer()
@@ -783,6 +827,8 @@ watch(stage, (val) => {
 onMounted(async () => {
   userStore.setCurrentGame('2048')
   document.addEventListener('keydown', handleKeydown)
+  document.addEventListener('touchstart', handleTouchStart, { passive: true })
+  document.addEventListener('touchend', handleTouchEnd, { passive: true })
   if (!user.value?.id) {
     stage.value = 'select'
     return
@@ -804,6 +850,8 @@ onUnmounted(() => {
   stopTimer()
   userStore.clearCurrentGame()
   document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('touchstart', handleTouchStart)
+  document.removeEventListener('touchend', handleTouchEnd)
 })
 
 // 棋盘一维渲染
@@ -1388,5 +1436,285 @@ const boardStyle = computed(() => {
 
 .custom-dialog-actions button:hover {
   background: #784d20;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .game-2048-root {
+    padding: 16px;
+  }
+
+  .difficulty-select h1 {
+    font-size: 1.8rem;
+  }
+
+  .difficulty-btns {
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .difficulty-btns button {
+    font-size: 1.2rem;
+    padding: 0.8rem 2rem;
+    width: 200px;
+  }
+
+  .back-btn {
+    font-size: 1rem;
+    padding: 0.6rem 1.5rem;
+  }
+
+  .rules-display {
+    padding: 1rem;
+    max-width: 100%;
+  }
+
+  .rules-display h2 {
+    font-size: 1.4rem;
+  }
+
+  .rules-content {
+    padding: 1.2rem;
+    margin: 1rem 0;
+  }
+
+  .rule-item {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .rule-label {
+    min-width: auto;
+    margin-right: 0;
+  }
+
+  .action-btns {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.8rem;
+  }
+
+  .start-btn,
+  .action-btns .back-btn {
+    width: 100%;
+  }
+
+  .game-title {
+    font-size: 1.4rem;
+    margin-bottom: 16px;
+  }
+
+  .game-info-table {
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .info-cell {
+    font-size: 0.95rem;
+  }
+
+  .game-btn-row {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 0 8px;
+  }
+
+  .save-btn {
+    font-size: 0.85rem;
+    padding: 0.4rem 1rem;
+    margin-left: 0;
+  }
+
+  .game-board {
+    width: 90vw;
+    max-width: 400px;
+    padding: 3vw;
+    gap: 8px;
+  }
+
+  .cell {
+    font-size: clamp(0.9rem, 4vw, 1.8rem);
+  }
+
+  .game-result {
+    width: 90%;
+    max-width: 320px;
+    padding: 1.5rem 1.5rem;
+  }
+
+  .result-text {
+    font-size: 1.5rem;
+  }
+
+  .enhanced-result {
+    min-width: auto;
+    width: 90%;
+    max-width: 320px;
+    padding: 1.5rem 1.5rem;
+  }
+
+  .result-title {
+    font-size: 1.8rem;
+  }
+
+  .result-desc {
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .result-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.8rem;
+  }
+
+  .result-btn {
+    width: 100%;
+    padding: 0.8rem 1.5rem;
+  }
+
+  .custom-dialog {
+    width: 90%;
+    max-width: 320px;
+    padding: 20px 24px;
+  }
+
+  .custom-dialog-title {
+    font-size: 1.1rem;
+  }
+
+  .custom-dialog-content {
+    font-size: 0.9rem;
+  }
+
+  .custom-dialog-actions {
+    width: 100%;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .custom-dialog-actions button {
+    width: 100%;
+    padding: 10px 16px;
+  }
+
+  /* 过渡动画适配 */
+  .tiles-container {
+    max-width: 280px;
+    gap: 10px;
+  }
+
+  .transition-anim .tile {
+    width: 60px;
+    height: 60px;
+    font-size: 1.5rem;
+  }
+
+  .transition-anim .start-text {
+    font-size: 3.5rem;
+  }
+
+  .subtitle {
+    font-size: 1.2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .game-2048-root {
+    padding: 12px;
+  }
+
+  .difficulty-select h1 {
+    font-size: 1.5rem;
+  }
+
+  .difficulty-btns button {
+    font-size: 1.1rem;
+    padding: 0.7rem 1.5rem;
+    width: 180px;
+  }
+
+  .back-btn {
+    font-size: 0.9rem;
+    padding: 0.5rem 1.2rem;
+  }
+
+  .rules-content {
+    padding: 1rem;
+  }
+
+  .rule-label,
+  .rule-value {
+    font-size: 0.9rem;
+  }
+
+  .prob-item {
+    padding: 0.2rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .game-title {
+    font-size: 1.2rem;
+    margin-top: 8px;
+    margin-bottom: 12px;
+  }
+
+  .game-info-table {
+    gap: 12px;
+  }
+
+  .info-cell {
+    font-size: 0.85rem;
+  }
+
+  .game-btn-row {
+    gap: 8px;
+  }
+
+  .save-btn {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.8rem;
+  }
+
+  .game-board {
+    width: 94vw;
+    max-width: 360px;
+    padding: 2.5vw;
+    gap: 6px;
+    border-radius: 12px;
+  }
+
+  .cell {
+    font-size: clamp(0.8rem, 5vw, 1.5rem);
+    border-radius: 4px;
+  }
+
+  .cell-1024,
+  .cell-2048,
+  .cell-4096 {
+    font-size: clamp(0.6rem, 4vw, 1.2rem);
+  }
+
+  .tiles-container {
+    max-width: 240px;
+    gap: 8px;
+  }
+
+  .transition-anim .tile {
+    width: 50px;
+    height: 50px;
+    font-size: 1.2rem;
+  }
+
+  .transition-anim .start-text {
+    font-size: 2.8rem;
+  }
+
+  .subtitle {
+    font-size: 1rem;
+  }
 }
 </style>

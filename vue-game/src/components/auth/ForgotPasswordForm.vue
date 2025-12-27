@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import request from '../../config/api'
 import { ElMessage } from 'element-plus'
 
@@ -7,6 +7,12 @@ const emit = defineEmits(['success', 'fail', 'focus', 'blur', 'showPasswordChang
 
 const isLoading = ref(false)
 const showPassword = ref(false)
+
+// hCaptcha
+const hcaptchaToken = ref('')
+const hcaptchaLoaded = ref(false)
+const hcaptchaWidgetId = ref(null)
+const HCAPTCHA_SITE_KEY = 'dceab3a2-519c-4ec2-977e-1aea8b94e6c6'
 
 // 验证码倒计时
 const isCodeSent = ref(false)
@@ -80,18 +86,105 @@ const validate = () => {
   return valid
 }
 
+// hCaptcha 相关
+const renderHcaptcha = () => {
+  nextTick(() => {
+    const container = document.getElementById('forgot-hcaptcha-container')
+    if (!container || !globalThis.hcaptcha) return
+
+    if (hcaptchaWidgetId.value !== null) {
+      try {
+        globalThis.hcaptcha.remove(hcaptchaWidgetId.value)
+      } catch (e) {}
+    }
+
+    container.innerHTML = ''
+
+    try {
+      hcaptchaWidgetId.value = globalThis.hcaptcha.render('forgot-hcaptcha-container', {
+        sitekey: HCAPTCHA_SITE_KEY,
+        size: 'invisible',
+        callback: (token) => {
+          hcaptchaToken.value = token
+          doSendCode()
+        },
+        'expired-callback': () => {
+          hcaptchaToken.value = ''
+          ElMessage.warning('验证已过期，请重新提交')
+        },
+        'error-callback': () => {
+          hcaptchaToken.value = ''
+          ElMessage.error('验证出错，请重试')
+        }
+      })
+    } catch (e) {
+      console.error('渲染 hCaptcha 失败:', e)
+    }
+  })
+}
+
+const resetHcaptcha = () => {
+  hcaptchaToken.value = ''
+  if (globalThis.hcaptcha && hcaptchaWidgetId.value !== null) {
+    try {
+      globalThis.hcaptcha.reset(hcaptchaWidgetId.value)
+    } catch (e) {}
+  }
+}
+
+onMounted(() => {
+  if (document.querySelector('script[src*="hcaptcha.com"]')) {
+    hcaptchaLoaded.value = true
+    renderHcaptcha()
+  } else {
+    const script = document.createElement('script')
+    script.src = 'https://js.hcaptcha.com/1/api.js'
+    script.async = true
+    script.defer = true
+    script.onload = () => {
+      hcaptchaLoaded.value = true
+      renderHcaptcha()
+    }
+    document.head.appendChild(script)
+  }
+})
+
 onUnmounted(() => {
+  if (hcaptchaWidgetId.value !== null && globalThis.hcaptcha) {
+    try {
+      globalThis.hcaptcha.remove(hcaptchaWidgetId.value)
+    } catch (e) {}
+  }
   if (countdownTimer) clearInterval(countdownTimer)
 })
 
-// 发送验证码
-const sendVerificationCode = async () => {
+// 发送验证码（先触发人机验证）
+const sendVerificationCode = () => {
   if (!form.email.trim()) {
     ElMessage.warning('请先输入QQ邮箱')
     return
   }
   if (!validateEmail(form.email)) {
     ElMessage.warning('请输入有效的QQ邮箱地址')
+    return
+  }
+  if (!hcaptchaLoaded.value || !globalThis.hcaptcha || hcaptchaWidgetId.value === null) {
+    ElMessage.warning('人机验证尚未加载完成，请稍后重试')
+    return
+  }
+
+  hcaptchaToken.value = ''
+  try {
+    globalThis.hcaptcha.execute(hcaptchaWidgetId.value)
+  } catch (e) {
+    ElMessage.error('启动人机验证失败，请刷新页面重试')
+  }
+}
+
+// 实际发送验证码
+const doSendCode = async () => {
+  if (!hcaptchaToken.value) {
+    ElMessage.warning('人机验证失败，请重试')
     return
   }
 
@@ -106,7 +199,10 @@ const sendVerificationCode = async () => {
   }, 1000)
 
   try {
-    const response = await request.post('/email/sendCode', { email: form.email }, { timeout: 30000 })
+    const response = await request.post('/email/sendCode', { 
+      email: form.email,
+      hcaptchaToken: hcaptchaToken.value
+    }, { timeout: 30000 })
     if (response.data.success) {
       ElMessage.success('验证码已发送到您的邮箱')
     } else {
@@ -116,7 +212,12 @@ const sendVerificationCode = async () => {
       ElMessage.error(response.data.message || '发送验证码失败')
     }
   } catch (error) {
+    isCodeSent.value = false
+    countdown.value = 0
+    if (countdownTimer) clearInterval(countdownTimer)
     ElMessage.error('发送验证码失败，请稍后重试')
+  } finally {
+    resetHcaptcha()
   }
 }
 
@@ -214,6 +315,8 @@ const togglePassword = () => {
         @blur="handleBlur" />
       <span v-if="errors.confirmNewPassword" class="error-message">{{ errors.confirmNewPassword }}</span>
     </div>
+
+    <div id="forgot-hcaptcha-container" style="display: none;"></div>
 
     <button type="submit" class="submit-btn" :disabled="!isValid || isLoading">
       <span v-if="isLoading">重置中...</span>
@@ -368,5 +471,44 @@ const togglePassword = () => {
 .link:hover {
   color: #000;
   text-decoration: underline;
+}
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+  .auth-form {
+    gap: 14px;
+  }
+
+  .form-label {
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+  }
+
+  .form-input {
+    padding: 12px 14px;
+    font-size: 16px; /* 防止 iOS 自动缩放 */
+    border-radius: 6px;
+  }
+
+  .verification-wrapper {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .send-code-btn {
+    width: 100%;
+    padding: 12px;
+    min-width: auto;
+  }
+
+  .submit-btn {
+    padding: 12px;
+    font-size: 0.95rem;
+    margin-top: 4px;
+  }
+
+  .link {
+    font-size: 0.85rem;
+  }
 }
 </style>

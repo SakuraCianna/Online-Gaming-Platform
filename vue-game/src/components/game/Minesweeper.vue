@@ -105,7 +105,8 @@
       <!-- 游戏棋盘 -->
       <div class="game-board" :style="boardStyle">
         <div v-for="(cell, idx) in boardCells" :key="idx" class="cell" :class="getCellClass(cell)"
-          @click="handleLeftClick(idx)" @contextmenu.prevent="handleRightClick(idx)" @dblclick="handleDoubleClick(idx)">
+          @click="handleLeftClick(idx)" @contextmenu.prevent="handleRightClick(idx)" @dblclick="handleDoubleClick(idx)"
+          @touchstart="handleTouchStart(idx, $event)" @touchend="handleTouchEnd(idx, $event)">
           <span v-if="cell.isRevealed && cell.mineCount > 0 && !cell.isMine" class="mine-count">
             {{ cell.mineCount }}
           </span>
@@ -113,6 +114,11 @@
           <span v-else-if="cell.isRevealed && cell.isMine" class="mine">💣</span>
           <span v-else-if="cell.isRevealed && cell.isExploded" class="exploded">💥</span>
         </div>
+      </div>
+
+      <!-- 移动端操作提示 -->
+      <div class="mobile-hint">
+        <span>💡 点击揭开 | 长按标记</span>
       </div>
 
       <!-- 游戏胜利弹窗 -->
@@ -440,6 +446,38 @@ function handleDoubleClick(idx) {
     gameWin.value = true
     stopTimer()
     autoSaveGame()
+  }
+}
+
+// 移动端长按标记支持
+let longPressTimer = null
+let isLongPress = false
+const LONG_PRESS_DURATION = 500 // 长按500ms触发标记
+
+function handleTouchStart(idx, event) {
+  if (gameOver.value || gameWin.value) return
+  
+  isLongPress = false
+  longPressTimer = setTimeout(() => {
+    isLongPress = true
+    // 触发震动反馈（如果设备支持）
+    if (navigator.vibrate) {
+      navigator.vibrate(50)
+    }
+    handleRightClick(idx)
+  }, LONG_PRESS_DURATION)
+}
+
+function handleTouchEnd(idx, event) {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+  
+  // 如果是长按，阻止后续的click事件
+  if (isLongPress) {
+    event.preventDefault()
+    isLongPress = false
   }
 }
 
@@ -911,7 +949,7 @@ const boardStyle = computed(() => {
   transform-style: preserve-3d;
 }
 
-/* ========== 爆炸动画样式 ========== */
+/* 爆炸动画样式 */
 .explosion-anim {
   position: absolute;
   inset: 0;
@@ -1519,6 +1557,11 @@ const boardStyle = computed(() => {
 
 /* 响应式设计 - 游戏界面 */
 @media (max-width: 768px) {
+  .minesweeper-root {
+    padding: 12px;
+    padding-bottom: 80px;
+  }
+
   .cell {
     width: 25px;
     height: 25px;
@@ -1530,22 +1573,289 @@ const boardStyle = computed(() => {
     gap: 1px;
   }
 
+  .difficulty-select h1 {
+    font-size: 1.5rem;
+  }
+
   .difficulty-btns {
     flex-direction: column;
     gap: 1rem;
   }
 
+  .difficulty-btns button {
+    font-size: 1.2rem;
+    padding: 0.8rem 2rem;
+  }
+
+  .back-btn {
+    font-size: 1rem;
+    padding: 0.6rem 1.5rem;
+  }
+
+  .rules-display {
+    padding: 1rem;
+    max-width: 100%;
+  }
+
+  .rules-display h2 {
+    font-size: 1.2rem;
+  }
+
+  .rules-content {
+    padding: 1rem;
+    margin: 1rem 0;
+  }
+
+  .rule-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .rule-label {
+    min-width: auto;
+    margin-right: 0;
+  }
+
+  .control-item {
+    padding: 0.4rem 0.8rem;
+    gap: 0.5rem;
+  }
+
+  .control-key {
+    min-width: 60px;
+    font-size: 0.85rem;
+  }
+
+  .action-btns {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .start-btn,
+  .action-btns .back-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .game-main {
+    padding: 12px;
+    padding-bottom: 80px;
+  }
+
+  .game-title {
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+  }
+
+  .game-info-table {
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .info-cell {
+    font-size: 1rem;
+  }
+
   .game-btn-row {
     flex-direction: column;
+    gap: 0.8rem;
+    width: 100%;
+    padding: 0 1rem;
+  }
+
+  .save-btn {
+    width: 100%;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .game-result {
+    width: 90%;
+    max-width: 320px;
+    padding: 1.5rem;
+  }
+
+  .result-text {
+    font-size: 1.5rem;
+  }
+
+  .result-time {
+    font-size: 1rem;
+  }
+
+  .enhanced-result {
+    min-width: auto;
+    width: 90%;
+    max-width: 320px;
+    padding: 1.5rem;
+  }
+
+  .result-title {
+    font-size: 1.8rem;
+  }
+
+  .result-desc {
+    font-size: 1rem;
+  }
+
+  .result-actions {
+    flex-direction: column;
     gap: 1rem;
+    width: 100%;
+  }
+
+  .result-btn {
+    width: 100%;
+    padding: 0.8rem 1.5rem;
+  }
+
+  .custom-dialog {
+    width: 90%;
+    max-width: 300px;
+    padding: 20px;
+  }
+
+  .custom-dialog-title {
+    font-size: 1.1rem;
+  }
+
+  .custom-dialog-content {
+    font-size: 0.9rem;
+  }
+
+  .custom-dialog-actions {
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .custom-dialog-actions button {
+    width: 100%;
   }
 }
 
 @media (max-width: 480px) {
+  .minesweeper-root {
+    padding: 8px;
+    padding-bottom: 80px;
+  }
+
   .cell {
     width: 20px;
     height: 20px;
     font-size: 0.7rem;
   }
+
+  .game-board {
+    padding: 0.3rem;
+    max-width: 95vw;
+    max-height: 60vh;
+  }
+
+  .difficulty-select h1 {
+    font-size: 1.3rem;
+  }
+
+  .difficulty-btns button {
+    font-size: 1rem;
+    padding: 0.7rem 1.5rem;
+  }
+
+  .rules-display h2 {
+    font-size: 1rem;
+  }
+
+  .rule-label,
+  .rule-value {
+    font-size: 0.85rem;
+  }
+
+  .control-key,
+  .control-desc {
+    font-size: 0.8rem;
+  }
+
+  .game-title {
+    font-size: 1.2rem;
+    margin-top: 8px;
+    margin-bottom: 12px;
+  }
+
+  .info-cell {
+    font-size: 0.9rem;
+  }
+
+  .save-btn {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.8rem;
+  }
+
+  /* 高级难度棋盘特殊处理 */
+  .game-board[style*="repeat(30"] .cell {
+    width: 12px;
+    height: 12px;
+    font-size: 0.5rem;
+  }
+
+  /* 中级难度棋盘 */
+  .game-board[style*="repeat(16"] .cell {
+    width: 16px;
+    height: 16px;
+    font-size: 0.6rem;
+  }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .cell {
+    /* 增大触摸区域 */
+    min-width: 28px;
+    min-height: 28px;
+  }
+
+  .cell-hidden:hover {
+    background: #ecf0f1;
+  }
+
+  /* 禁用hover效果，避免触摸时的视觉问题 */
+  .difficulty-btns button:hover {
+    background: #2874c5;
+  }
+
+  .back-btn:hover {
+    background: #6d5d52;
+  }
+
+  .start-btn:hover {
+    background: #c0392b;
+  }
+
+  .save-btn:hover {
+    background: #6d5d52;
+  }
+
+  /* 显示移动端操作提示 */
+  .mobile-hint {
+    display: block;
+  }
+}
+
+/* 移动端操作提示 */
+.mobile-hint {
+  display: none;
+  text-align: center;
+  padding: 8px 16px;
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #666;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-hint span {
+  display: inline-block;
 }
 </style>

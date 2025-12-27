@@ -262,4 +262,32 @@ const togglePassword = () => {
   color: #000;
   text-decoration: underline;
 }
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+  .auth-form {
+    gap: 16px;
+  }
+
+  .form-label {
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+  }
+
+  .form-input {
+    padding: 12px 14px;
+    font-size: 16px; /* 防止 iOS 自动缩放 */
+    border-radius: 6px;
+  }
+
+  .submit-btn {
+    padding: 12px;
+    font-size: 0.95rem;
+    margin-top: 4px;
+  }
+
+  .forgot-link span {
+    font-size: 0.8rem;
+  }
+}
 </style>

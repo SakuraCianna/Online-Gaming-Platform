@@ -268,10 +268,21 @@ function initAnimation() {
 @media (max-width: 768px) {
   .user-layout {
     flex-direction: column;
+    position: relative;
   }
 
   .side {
     height: auto;
+    width: 100%;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    z-index: 100;
+  }
+
+  .main {
+    height: calc(100vh - 70px);
+    padding-bottom: 70px;
   }
 
   .main-header {
@@ -283,9 +294,8 @@ function initAnimation() {
   }
 
   .main-content {
-    padding: 20px;
-    height: calc(100vh - 120px);
-    /* 移动端调整高度 */
+    padding: 16px;
+    height: calc(100vh - 70px);
   }
 
   /* 移动端动画调整 */

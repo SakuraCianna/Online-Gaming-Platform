@@ -1987,4 +1987,252 @@ onBeforeUnmount(() => {
     height: 28px;
   }
 }
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+  .gomoku-game {
+    padding-bottom: 80px;
+  }
+
+  .game-header {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-left {
+    gap: 8px;
+  }
+
+  .header-left .iconify {
+    width: 20px;
+    height: 20px;
+  }
+
+  .game-title {
+    font-size: 14px;
+  }
+
+  .room-code-badge {
+    display: none;
+  }
+
+  .header-center {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .turn-indicator {
+    padding: 5px 12px;
+    font-size: 12px;
+    border-radius: 16px;
+  }
+
+  .btn-surrender {
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+
+  .btn-surrender span {
+    display: none;
+  }
+
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .game-container {
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    justify-content: flex-start;
+  }
+
+  /* 玩家信息横向排列 */
+  .player-info {
+    flex-direction: row;
+    width: 100%;
+    padding: 8px 12px;
+    gap: 10px;
+    min-width: unset;
+    border-radius: 10px;
+  }
+
+  .player-info.left-player {
+    order: 1;
+  }
+
+  .player-info.right-player {
+    order: 3;
+  }
+
+  .game-board-wrapper {
+    order: 2;
+  }
+
+  .player-avatar {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+
+  .piece-indicator {
+    width: 16px;
+    height: 16px;
+    right: -2px;
+    bottom: -2px;
+    border-width: 2px;
+  }
+
+  .player-details {
+    flex: 1;
+    text-align: left;
+  }
+
+  .player-name {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
+  }
+
+  .player-role {
+    font-size: 11px;
+  }
+
+  .player-timer {
+    padding: 4px 10px;
+    font-size: 12px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .player-timer .iconify {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* 棋盘适配 */
+  .game-board {
+    width: min(92vw, 360px);
+    height: min(92vw, 360px);
+    padding: 10px;
+    border-radius: 8px;
+    border-width: 2px;
+  }
+
+  .stone,
+  .stone-preview {
+    width: 16px;
+    height: 16px;
+  }
+
+  .interaction-point {
+    width: 20px;
+    height: 20px;
+  }
+
+  .star {
+    width: 4px;
+    height: 4px;
+  }
+
+  .line {
+    background: #9b8365;
+  }
+
+  .line.horizontal {
+    height: 1px;
+  }
+
+  .line.vertical {
+    width: 1px;
+  }
+
+  /* 最后一步标记缩小 */
+  .stone-wrapper.last-move::after {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* 胜负弹窗适配 */
+  .winner-dialog {
+    padding: 24px 20px;
+    margin: 16px;
+    max-width: calc(100vw - 32px);
+    border-radius: 16px;
+  }
+
+  .winner-icon .iconify {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  .winner-title {
+    font-size: 22px;
+  }
+
+  .winner-subtitle {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  .winner-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .btn-winner {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 20px;
+  }
+
+  /* AI思考提示适配 */
+  .thinking-content {
+    padding: 16px 24px;
+    gap: 12px;
+  }
+
+  .thinking-text {
+    font-size: 14px;
+  }
+}
+
+/* 超小屏幕适配 */
+@media (max-width: 360px) {
+  .game-board {
+    width: min(95vw, 300px);
+    height: min(95vw, 300px);
+    padding: 8px;
+  }
+
+  .stone,
+  .stone-preview {
+    width: 14px;
+    height: 14px;
+  }
+
+  .interaction-point {
+    width: 18px;
+    height: 18px;
+  }
+
+  .player-name {
+    max-width: 60px;
+  }
+
+  .game-header {
+    padding: 6px 10px;
+  }
+
+  .game-title {
+    font-size: 13px;
+  }
+}
 </style>

@@ -216,11 +216,60 @@ async function logout() {
   font-size: 18px;
 }
 
-/* 响应式设计 */
+/* 响应式设计 - 移动端底部导航栏 */
 @media (max-width: 768px) {
   .user-side {
     width: 100%;
-    height: auto;
+    height: 70px;
+    flex-direction: row;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    padding: 0;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .side-bar {
+    flex: 1;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .side-bar ul {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 70px;
+    padding: 0 8px;
+  }
+
+  .side-bar li {
+    flex-direction: column;
+    padding: 8px 12px;
+    margin: 0;
+    gap: 4px;
+    border-radius: 8px;
+    min-width: 50px;
+  }
+
+  .side-bar li:hover {
+    transform: none;
+  }
+
+  .side-bar .icon {
+    font-size: 20px;
+  }
+
+  .side-bar .label {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .logout-section {
+    display: none;
   }
 }
 </style>
