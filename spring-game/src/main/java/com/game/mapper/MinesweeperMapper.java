@@ -43,4 +43,32 @@ public interface MinesweeperMapper extends BaseMapper<Minesweeper> {
                         "SUM(duration) as totalDuration " +
                         "FROM minesweeper WHERE user_id = #{userId}")
         Map<String, Object> selectStatsByUserId(@Param("userId") Long userId);
+
+        // 排行榜：按最快通关时间排序（只统计有胜利记录的用户）
+        @Select("SELECT u.id as userId, u.username, u.avatar, " +
+                        "MIN(CASE WHEN m.status = 1 THEN m.duration ELSE NULL END) as bestTime, " +
+                        "(SELECT COUNT(*) FROM minesweeper WHERE user_id = u.id) as totalGames, " +
+                        "ROUND(SUM(CASE WHEN m.status = 1 THEN 1 ELSE 0 END) * 1.0 / COUNT(*), 4) as winRate " +
+                        "FROM minesweeper m JOIN `user` u ON m.user_id = u.id " +
+                        "GROUP BY u.id HAVING bestTime IS NOT NULL ORDER BY bestTime ASC LIMIT #{limit}")
+        List<Map<String, Object>> selectLeaderboardByTime(@Param("limit") Integer limit);
+
+        // 排行榜：按胜率排序（至少5局）
+        @Select("SELECT u.id as userId, u.username, u.avatar, " +
+                        "MIN(CASE WHEN m.status = 1 THEN m.duration ELSE NULL END) as bestTime, " +
+                        "COUNT(*) as totalGames, " +
+                        "ROUND(SUM(CASE WHEN m.status = 1 THEN 1 ELSE 0 END) * 1.0 / COUNT(*), 4) as winRate " +
+                        "FROM minesweeper m JOIN `user` u ON m.user_id = u.id " +
+                        "GROUP BY u.id HAVING totalGames >= 5 ORDER BY winRate DESC, totalGames DESC LIMIT #{limit}")
+        List<Map<String, Object>> selectLeaderboardByWinRate(@Param("limit") Integer limit);
+
+        // 查询用户排名（按最快时间）
+        @Select("SELECT COUNT(*) + 1 FROM (" +
+                        "SELECT user_id, MIN(duration) as best FROM minesweeper WHERE status = 1 GROUP BY user_id" +
+                        ") t WHERE t.best < (SELECT IFNULL(MIN(duration), 999999) FROM minesweeper WHERE user_id = #{userId} AND status = 1)")
+        Integer selectUserRankByTime(@Param("userId") Long userId);
+
+        // 查询用户最快时间
+        @Select("SELECT MIN(duration) FROM minesweeper WHERE user_id = #{userId} AND status = 1")
+        Integer selectUserBestTime(@Param("userId") Long userId);
 }

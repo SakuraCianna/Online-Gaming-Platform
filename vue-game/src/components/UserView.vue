@@ -1,15 +1,15 @@
 <template>
-  <div class="user-layout" ref="userLayout">
-    <div class="side" ref="sideBar">
+  <div class="user-layout">
+    <div class="side">
       <UserSide :selected="selected" @select="selected = $event" />
     </div>
-    <div class="main" ref="mainContent">
+    <div class="main">
       <div class="main-content">
         <router-view v-slot="{ Component }">
           <!-- 添加 keep-alive 缓存常用页面，提升切换性能 -->
           <keep-alive :include="['GameCenter', 'GameRecords', 'Friends', 'GameRooms', 'Leaderboard', 'UserSettings']">
             <transition name="fade" mode="out-in">
-              <component :is="Component" :key="route.path" />
+              <component :is="Component" />
             </transition>
           </keep-alive>
         </router-view>
@@ -19,20 +19,12 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { gsap } from 'gsap'
 import UserSide from './Dashboard/UserSide.vue'
 
 const route = useRoute()
 const selected = ref('games')
-const notificationCount = ref(3)
-
-
-// 动画相关的ref
-const userLayout = ref(null)
-const sideBar = ref(null)
-const mainContent = ref(null)
 
 // 监听路由变化,更新选中的菜单项
 watch(() => route.path, (newPath) => {
@@ -41,63 +33,6 @@ watch(() => route.path, (newPath) => {
     selected.value = pathSegments[2]
   }
 }, { immediate: true })
-
-// 根据当前路由获取页面标题
-function getPageTitle() {
-  const routeMap = {
-    'games': '游戏中心',
-    'friends': '好友管理',
-    'rooms': '游戏房间',
-    'records': '游戏记录',
-    'settings': '个人设置'
-  }
-  return routeMap[selected.value] || '游戏中心'
-}
-
-// 初始化GSAP动画
-onMounted(() => {
-  initAnimation()
-})
-
-function initAnimation() {
-  // 设置初始状态
-  gsap.set(sideBar.value, { x: -280, opacity: 0 })
-  gsap.set(mainContent.value, { x: 100, opacity: 0 })
-
-  // 创建时间轴
-  const tl = gsap.timeline()
-
-  // 侧边栏滑入动画
-  tl.to(sideBar.value, {
-    x: 0,
-    opacity: 1,
-    duration: 0.8,
-    ease: "power2.out"
-  })
-
-  // 主内容区域滑入动画
-  tl.to(mainContent.value, {
-    x: 0,
-    opacity: 1,
-    duration: 0.8,
-    ease: "power2.out"
-  }, "-=0.4") // 稍微重叠，创造流畅效果
-
-  // 添加一些弹性效果
-  tl.to([sideBar.value, mainContent.value], {
-    scale: 1.02,
-    duration: 0.1,
-    ease: "power2.out"
-  })
-    .to([sideBar.value, mainContent.value], {
-      scale: 1,
-      duration: 0.1,
-      ease: "power2.out"
-    })
-}
-
-// 注意：页面切换动画已由 CSS transition 处理，不需要重复的 GSAP 动画
-// 移除了冲突的 animatePageTransition 以提升性能
 </script>
 
 <style scoped>

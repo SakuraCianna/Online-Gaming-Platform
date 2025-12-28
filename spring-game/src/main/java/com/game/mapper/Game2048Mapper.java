@@ -28,4 +28,30 @@ public interface Game2048Mapper extends BaseMapper<Game2048> {
                         "SUM(duration) as totalDuration " +
                         "FROM game2048 WHERE user_id = #{userId}")
         Map<String, Object> selectStatsByUserId(@Param("userId") Long userId);
+
+        // 排行榜：按最高分排序
+        @Select("SELECT u.id as userId, u.username, u.avatar, " +
+                        "MAX(g.score) as bestScore, MAX(g.max_tile) as bestTile, COUNT(*) as totalGames " +
+                        "FROM game2048 g JOIN `user` u ON g.user_id = u.id " +
+                        "WHERE g.status = 1 " +
+                        "GROUP BY u.id ORDER BY bestScore DESC LIMIT #{limit}")
+        List<Map<String, Object>> selectLeaderboardByScore(@Param("limit") Integer limit);
+
+        // 排行榜：按最大方块排序
+        @Select("SELECT u.id as userId, u.username, u.avatar, " +
+                        "MAX(g.score) as bestScore, MAX(g.max_tile) as bestTile, COUNT(*) as totalGames " +
+                        "FROM game2048 g JOIN `user` u ON g.user_id = u.id " +
+                        "WHERE g.status = 1 " +
+                        "GROUP BY u.id ORDER BY bestTile DESC, bestScore DESC LIMIT #{limit}")
+        List<Map<String, Object>> selectLeaderboardByTile(@Param("limit") Integer limit);
+
+        // 查询用户排名（按最高分）
+        @Select("SELECT COUNT(*) + 1 FROM (" +
+                        "SELECT user_id, MAX(score) as best FROM game2048 WHERE status = 1 GROUP BY user_id" +
+                        ") t WHERE t.best > (SELECT IFNULL(MAX(score), 0) FROM game2048 WHERE user_id = #{userId} AND status = 1)")
+        Integer selectUserRankByScore(@Param("userId") Long userId);
+
+        // 查询用户最高分
+        @Select("SELECT MAX(score) FROM game2048 WHERE user_id = #{userId} AND status = 1")
+        Integer selectUserBestScore(@Param("userId") Long userId);
 }

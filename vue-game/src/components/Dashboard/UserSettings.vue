@@ -1,127 +1,196 @@
 <template>
-  <div class="settings-container">
-    <div class="settings-header">
+  <div class="user-settings">
+    <!-- 页面标题 -->
+    <div class="page-header">
       <h2>个人设置</h2>
     </div>
 
-    <div class="settings-content">
-      <!-- 头像设置 -->
-      <div class="settings-card">
-        <div class="card-title">
-          <span class="icon">👤</span>
-          <span>头像设置</span>
+    <!-- 设置列表 - 行式布局 -->
+    <div class="settings-list">
+      <!-- 头像设置行 -->
+      <div class="setting-row avatar-row">
+        <div class="setting-icon">
+          <span>👤</span>
         </div>
-        <div class="avatar-section">
-          <div class="current-avatar">
-            <img :src="user?.avatar || '/image/default-avatar.jpg'" alt="头像" />
-          </div>
-          <div class="avatar-actions">
-            <input 
-              ref="avatarInput" 
-              type="file" 
-              accept="image/*" 
-              style="display: none" 
-              @change="handleAvatarChange"
-            />
-            <button class="btn-upload" @click="triggerAvatarUpload">
-              <span class="btn-icon">📷</span>
-              <span>更换头像</span>
-            </button>
-            <p class="avatar-tip">支持 JPG、PNG 格式，大小不超过 5MB</p>
-          </div>
+        <div class="setting-label">
+          <span class="label">头像</span>
+          <span class="desc">更换个人头像</span>
+        </div>
+        <div class="setting-content">
+          <img :src="user?.avatar || '/image/default-avatar.jpg'" class="avatar-preview" />
+        </div>
+        <div class="setting-action">
+          <input 
+            ref="avatarInput" 
+            type="file" 
+            accept="image/*" 
+            style="display: none" 
+            @change="handleAvatarChange"
+          />
+          <button class="btn-action" @click="triggerAvatarUpload">📷 更换</button>
         </div>
       </div>
 
-      <!-- 基本信息 -->
-      <div class="settings-card">
-        <div class="card-title">
-          <span class="icon">📝</span>
-          <span>基本信息</span>
+      <!-- 用户名设置行 -->
+      <div class="setting-row">
+        <div class="setting-icon">
+          <span>📝</span>
         </div>
-        <div class="form-group">
-          <label>用户名</label>
+        <div class="setting-label">
+          <span class="label">用户名</span>
+          <span class="desc">修改显示名称</span>
+        </div>
+        <div class="setting-content">
           <input 
             v-model="formData.username" 
             type="text" 
+            class="inline-input"
             placeholder="请输入用户名"
             maxlength="20"
           />
         </div>
-        <div class="form-group">
-          <label>邮箱</label>
-          <input 
-            :value="user?.email" 
-            type="email" 
-            disabled 
-            class="disabled"
-          />
-          <span class="field-tip">邮箱不可修改</span>
+        <div class="setting-action">
+          <button class="btn-action primary" :disabled="saving" @click="saveBasicInfo">
+            {{ saving ? '保存中...' : '保存' }}
+          </button>
         </div>
-
-        <button class="btn-save" :disabled="saving" @click="saveBasicInfo">
-          {{ saving ? '保存中...' : '保存修改' }}
-        </button>
       </div>
 
-      <!-- 修改密码 -->
-      <div class="settings-card">
-        <div class="card-title">
-          <span class="icon">🔒</span>
-          <span>修改密码</span>
+      <!-- 邮箱显示行 -->
+      <div class="setting-row disabled">
+        <div class="setting-icon">
+          <span>📧</span>
         </div>
-        <div class="form-group">
-          <label>当前密码</label>
+        <div class="setting-label">
+          <span class="label">邮箱</span>
+          <span class="desc">账号绑定邮箱</span>
+        </div>
+        <div class="setting-content">
+          <span class="value">{{ user?.email || '未设置' }}</span>
+        </div>
+        <div class="setting-action">
+          <span class="status-tag">🔒 不可修改</span>
+        </div>
+      </div>
+
+      <!-- 分隔标题 -->
+      <div class="section-title">
+        <span class="icon">🔒</span>
+        <span>密码安全</span>
+      </div>
+
+      <!-- 当前密码行 -->
+      <div class="setting-row">
+        <div class="setting-icon">
+          <span>🔑</span>
+        </div>
+        <div class="setting-label">
+          <span class="label">当前密码</span>
+          <span class="desc">验证身份</span>
+        </div>
+        <div class="setting-content">
           <input 
             v-model="passwordForm.oldPassword" 
             type="password" 
+            class="inline-input"
             placeholder="请输入当前密码"
           />
         </div>
-        <div class="form-group">
-          <label>新密码</label>
+        <div class="setting-action"></div>
+      </div>
+
+      <!-- 新密码行 -->
+      <div class="setting-row">
+        <div class="setting-icon">
+          <span>🔐</span>
+        </div>
+        <div class="setting-label">
+          <span class="label">新密码</span>
+          <span class="desc">至少6位字符</span>
+        </div>
+        <div class="setting-content">
           <input 
             v-model="passwordForm.newPassword" 
             type="password" 
-            placeholder="请输入新密码（至少6位）"
+            class="inline-input"
+            placeholder="请输入新密码"
           />
         </div>
-        <div class="form-group">
-          <label>确认新密码</label>
+        <div class="setting-action"></div>
+      </div>
+
+      <!-- 确认密码行 -->
+      <div class="setting-row">
+        <div class="setting-icon">
+          <span>✅</span>
+        </div>
+        <div class="setting-label">
+          <span class="label">确认密码</span>
+          <span class="desc">再次输入新密码</span>
+        </div>
+        <div class="setting-content">
           <input 
             v-model="passwordForm.confirmPassword" 
             type="password" 
-            placeholder="请再次输入新密码"
+            class="inline-input"
+            placeholder="请确认新密码"
           />
         </div>
-        <button class="btn-save" :disabled="changingPassword" @click="changePassword">
-          {{ changingPassword ? '修改中...' : '修改密码' }}
-        </button>
+        <div class="setting-action">
+          <button class="btn-action primary" :disabled="changingPassword" @click="changePassword">
+            {{ changingPassword ? '修改中...' : '修改密码' }}
+          </button>
+        </div>
       </div>
 
-      <!-- 账号安全 -->
-      <div class="settings-card">
-        <div class="card-title">
-          <span class="icon">🛡️</span>
-          <span>账号安全</span>
+      <!-- 分隔标题 -->
+      <div class="section-title">
+        <span class="icon">🛡️</span>
+        <span>账号状态</span>
+      </div>
+
+      <!-- 登录状态行 -->
+      <div class="setting-row">
+        <div class="setting-icon">
+          <span>🟢</span>
         </div>
-        <div class="security-item">
-          <div class="security-info">
-            <span class="security-label">登录状态</span>
-            <span class="security-value online">在线</span>
-          </div>
+        <div class="setting-label">
+          <span class="label">登录状态</span>
+          <span class="desc">当前会话状态</span>
         </div>
-        <div class="security-item">
-          <div class="security-info">
-            <span class="security-label">注册时间</span>
-            <span class="security-value">{{ formatDate(user?.createTime) }}</span>
-          </div>
+        <div class="setting-content">
+          <span class="status-badge online">在线</span>
         </div>
-        <div class="security-item danger">
-          <div class="security-info">
-            <span class="security-label">退出登录</span>
-            <span class="security-desc">退出当前账号</span>
-          </div>
-          <button class="btn-logout" @click="handleLogout">退出</button>
+        <div class="setting-action"></div>
+      </div>
+
+      <!-- 注册时间行 -->
+      <div class="setting-row">
+        <div class="setting-icon">
+          <span>📅</span>
+        </div>
+        <div class="setting-label">
+          <span class="label">注册时间</span>
+          <span class="desc">账号创建日期</span>
+        </div>
+        <div class="setting-content">
+          <span class="value">{{ formatDate(user?.createTime) }}</span>
+        </div>
+        <div class="setting-action"></div>
+      </div>
+
+      <!-- 退出登录行 -->
+      <div class="setting-row danger">
+        <div class="setting-icon">
+          <span>🚪</span>
+        </div>
+        <div class="setting-label">
+          <span class="label">退出登录</span>
+          <span class="desc">退出当前账号</span>
+        </div>
+        <div class="setting-content"></div>
+        <div class="setting-action">
+          <button class="btn-action danger" @click="handleLogout">退出登录</button>
         </div>
       </div>
     </div>
@@ -314,387 +383,292 @@ function formatDate(dateStr) {
 
 
 <style scoped>
-.settings-container {
-  padding: 24px;
-  max-width: 800px;
-  margin: 0 auto;
+.user-settings {
+  padding: 20px;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-.settings-header {
-  margin-bottom: 24px;
+.page-header {
+  margin-bottom: 16px;
 }
 
-.settings-header h2 {
-  font-size: 24px;
-  font-weight: 700;
+.page-header h2 {
+  font-size: 20px;
+  font-weight: 600;
   color: #333;
   margin: 0;
 }
 
-.settings-content {
+/* 设置列表 */
+.settings-list {
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.settings-card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+.settings-list::-webkit-scrollbar {
+  display: none;
 }
 
-.card-title {
+/* 分隔标题 */
+.section-title {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 18px;
+  padding: 16px 0 8px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
 }
 
-.card-title .icon {
-  font-size: 20px;
+.section-title .icon {
+  font-size: 18px;
 }
 
-/* 头像设置 */
-.avatar-section {
+/* 设置行 */
+.setting-row {
   display: flex;
   align-items: center;
   gap: 24px;
+  padding: 18px 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  transition: all 0.2s;
+  border-left: 4px solid #667eea;
 }
 
-.current-avatar {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  flex-shrink: 0;
+.setting-row:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
 }
 
-.current-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.setting-row.disabled {
+  border-left-color: #9ca3af;
+  opacity: 0.8;
 }
 
-.avatar-actions {
+.setting-row.danger {
+  border-left-color: #ef4444;
+}
+
+.setting-row.avatar-row {
+  border-left-color: #10b981;
+}
+
+/* 图标 */
+.setting-icon {
+  font-size: 28px;
+  min-width: 40px;
+  text-align: center;
+}
+
+/* 标签 */
+.setting-label {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  min-width: 120px;
 }
 
-.btn-upload {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-upload:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.avatar-tip {
-  font-size: 12px;
-  color: #999;
-  margin: 0;
-}
-
-/* 表单样式 */
-.form-group {
-  margin-bottom: 20px;
-  position: relative;
-}
-
-.form-group label {
-  display: block;
-  font-size: 14px;
+.setting-label .label {
+  font-size: 16px;
   font-weight: 600;
   color: #333;
-  margin-bottom: 8px;
 }
 
-.form-group input,
-.form-group textarea {
+.setting-label .desc {
+  font-size: 13px;
+  color: #999;
+}
+
+/* 内容区 */
+.setting-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.avatar-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #e5e7eb;
+}
+
+.inline-input {
   width: 100%;
-  padding: 12px 16px;
+  max-width: 300px;
+  padding: 10px 16px;
   border: 2px solid #e8e8e8;
   border-radius: 10px;
-  font-size: 14px;
-  transition: all 0.2s ease;
-  box-sizing: border-box;
+  font-size: 15px;
+  transition: all 0.2s;
 }
 
-.form-group input:focus,
-.form-group textarea:focus {
+.inline-input:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.form-group input.disabled {
-  background: #f5f5f5;
-  color: #999;
-  cursor: not-allowed;
-}
-
-.form-group textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.field-tip {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
-  display: block;
-}
-
-.char-count {
-  position: absolute;
-  right: 12px;
-  bottom: 8px;
-  font-size: 12px;
-  color: #999;
-}
-
-.btn-save {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 32px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-save:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.btn-save:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* 安全设置 */
-.security-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.security-item:last-child {
-  border-bottom: none;
-}
-
-.security-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.security-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
-
-.security-value {
-  font-size: 14px;
+.value {
+  font-size: 15px;
   color: #666;
 }
 
-.security-value.online {
-  color: #52c41a;
+.status-badge {
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.security-desc {
-  font-size: 12px;
-  color: #999;
+.status-badge.online {
+  background: #d1fae5;
+  color: #059669;
 }
 
-.btn-logout {
-  padding: 8px 20px;
-  background: #ff4d4f;
-  color: #fff;
+.status-tag {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+/* 操作按钮 */
+.setting-action {
+  min-width: 100px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-action {
+  padding: 10px 20px;
   border: none;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
+  background: #f5f5f5;
+  color: #666;
+  white-space: nowrap;
 }
 
-.btn-logout:hover {
-  background: #ff7875;
+.btn-action:hover:not(:disabled) {
+  background: #e8e8e8;
 }
 
-/* 响应式适配 */
+.btn-action.primary {
+  background: #667eea;
+  color: #fff;
+}
+
+.btn-action.primary:hover:not(:disabled) {
+  background: #5a6fd6;
+}
+
+.btn-action.danger {
+  background: #ef4444;
+  color: #fff;
+}
+
+.btn-action.danger:hover {
+  background: #dc2626;
+}
+
+.btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 响应式 */
 @media (max-width: 768px) {
-  .settings-container {
+  .user-settings {
     padding: 16px;
   }
 
-  .settings-header h2 {
-    font-size: 20px;
-  }
-
-  .settings-card {
+  .setting-row {
+    flex-wrap: wrap;
+    gap: 12px;
     padding: 16px;
-    border-radius: 12px;
   }
 
-  .card-title {
-    font-size: 16px;
+  .setting-icon {
+    font-size: 24px;
+    min-width: 32px;
   }
 
-  .avatar-section {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
+  .setting-label {
+    min-width: 100px;
   }
 
-  .current-avatar {
-    width: 80px;
-    height: 80px;
+  .setting-content {
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .inline-input {
+    max-width: none;
+  }
+
+  .setting-action {
+    min-width: auto;
   }
 }
 
-/* 移动端适配 */
 @media (max-width: 480px) {
-  .settings-container {
+  .user-settings {
     padding: 12px;
-    padding-bottom: 100px;
+    padding-bottom: 80px;
   }
 
-  .settings-header {
-    margin-bottom: 16px;
-  }
-
-  .settings-header h2 {
+  .page-header h2 {
     font-size: 18px;
   }
 
-  .settings-content {
-    gap: 16px;
-  }
-
-  .settings-card {
-    padding: 14px;
-    border-radius: 10px;
-  }
-
-  .card-title {
-    font-size: 15px;
-    margin-bottom: 16px;
-    padding-bottom: 10px;
-    gap: 8px;
-  }
-
-  .card-title .icon {
-    font-size: 18px;
-  }
-
-  /* 头像区域 */
-  .avatar-section {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
-
-  .current-avatar {
-    width: 90px;
-    height: 90px;
-  }
-
-  .avatar-actions {
-    align-items: center;
-  }
-
-  .btn-upload {
-    padding: 10px 24px;
-    font-size: 14px;
-  }
-
-  /* 表单 */
-  .form-group {
-    margin-bottom: 16px;
-  }
-
-  .form-group label {
-    font-size: 13px;
-    margin-bottom: 6px;
-  }
-
-  .form-group input,
-  .form-group textarea {
-    padding: 10px 12px;
-    font-size: 16px; /* 防止iOS自动缩放 */
-    border-radius: 8px;
-  }
-
-  .form-group textarea {
-    min-height: 70px;
-  }
-
-  .btn-save {
-    width: 100%;
+  .setting-row {
     padding: 12px;
-    font-size: 15px;
-  }
-
-  /* 安全设置 */
-  .security-item {
-    padding: 12px 0;
-    flex-wrap: wrap;
     gap: 10px;
   }
 
-  .security-item.danger {
-    flex-direction: column;
-    align-items: flex-start;
+  .setting-icon {
+    font-size: 20px;
+    min-width: 28px;
   }
 
-  .security-item.danger .btn-logout {
-    width: 100%;
-    margin-top: 8px;
+  .setting-label .label {
+    font-size: 14px;
   }
 
-  .security-label {
-    font-size: 13px;
+  .setting-label .desc {
+    font-size: 12px;
   }
 
-  .security-value {
-    font-size: 13px;
+  .inline-input {
+    padding: 10px 12px;
+    font-size: 16px;
   }
 
-  .btn-logout {
+  .avatar-preview {
+    width: 40px;
+    height: 40px;
+  }
+
+  .btn-action {
     padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  .section-title {
+    font-size: 14px;
+    padding: 12px 0 6px;
   }
 }
 </style>
