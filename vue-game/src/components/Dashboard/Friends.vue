@@ -569,9 +569,8 @@ const loadUnreadCount = async () => {
 onMounted(() => {
   loadFriends()
   loadUnreadCount()
-})
 
-onMounted(() => {
+  // WebSocket 订阅
   if (wsService && user.value?.id) {
     // 好友请求推送
     wsService.subscribe(`/topic/friendRequest/${user.value.id}`, (msg) => {

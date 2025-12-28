@@ -14,6 +14,13 @@ import java.util.Map;
 public class GameRoomController {
     private final GameRoomService gameRoomService;
 
+    @GetMapping("/list")
+    public ResponseEntity<Map<String, Object>> getRoomList() {
+        Map<String, Object> result = gameRoomService.getRoomList();
+        result.put("code", 200);
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/checkRoomCode")
     public ResponseEntity<Map<String, Object>> checkRoomCode(@RequestParam String roomCode) {
         Map<String, Object> result = gameRoomService.checkRoomCode(roomCode);
@@ -25,6 +32,14 @@ public class GameRoomController {
     public ResponseEntity<Map<String, Object>> createRoom(@RequestBody Map<String, Object> request) {
         Long currentUserId = JwtUtil.getCurrentUserId();
         Map<String, Object> result = gameRoomService.createRoom(request, currentUserId);
+        result.put("code", 200);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/join")
+    public ResponseEntity<Map<String, Object>> joinRoom(@RequestBody Map<String, Object> request) {
+        Long currentUserId = JwtUtil.getCurrentUserId();
+        Map<String, Object> result = gameRoomService.joinRoom(request, currentUserId);
         result.put("code", 200);
         return ResponseEntity.ok(result);
     }

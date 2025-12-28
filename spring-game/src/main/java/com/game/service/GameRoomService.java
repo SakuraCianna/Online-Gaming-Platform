@@ -6,7 +6,6 @@ import com.game.entity.GameRoom;
 import com.game.entity.RoomPlayer;
 import com.game.entity.User;
 import com.game.exception.BusinessException;
-import com.game.mapper.GameRoomMapper;
 import com.game.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @RequiredArgsConstructor
 public class GameRoomService {
-    private final GameRoomMapper gameRoomMapper;
     private final UserMapper userMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
@@ -39,6 +37,78 @@ public class GameRoomService {
         return result;
     }
 
+    /**
+     * 获取所有房间列表（从Redis扫描room:code:*）
+     * 使用SCAN代替KEYS，避免阻塞Redis
+     */
+    public Map<String, Object> getRoomList() {
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> roomList = new ArrayList<>();
+
+        try {
+            // 使用SCAN迭代扫描，不阻塞Redis
+            Set<String> roomKeys = new HashSet<>();
+            try (var cursor = redisTemplate.scan(
+                    org.springframework.data.redis.core.ScanOptions.scanOptions()
+                            .match("room:code:*")
+                            .count(100)
+                            .build())) {
+                cursor.forEachRemaining(key -> roomKeys.add(key.toString()));
+            }
+
+            if (roomKeys.isEmpty()) {
+                result.put("success", true);
+                result.put("rooms", roomList);
+                return result;
+            }
+
+            for (String roomKey : roomKeys) {
+                try {
+                    Object roomObj = redisTemplate.opsForValue().get(roomKey);
+                    if (roomObj == null) continue;
+
+                    GameRoom room = objectMapper.convertValue(roomObj, GameRoom.class);
+                    
+                    // 获取房主信息
+                    User creator = userMapper.selectById(room.getCreatorId());
+                    
+                    // 获取当前玩家数
+                    String playerKey = redisKeyManager.buildPlayerKey(room.getRoomCode());
+                    Long currentPlayers = redisTemplate.opsForHash().size(playerKey);
+
+                    Map<String, Object> roomInfo = new HashMap<>();
+                    roomInfo.put("id", room.getId());
+                    roomInfo.put("roomCode", room.getRoomCode());
+                    roomInfo.put("gameName", room.getGameName());
+                    roomInfo.put("status", room.getStatus() != null ? room.getStatus() : 0);
+                    roomInfo.put("isPrivate", room.getIsPrivate() != null ? room.getIsPrivate() : 0);
+                    roomInfo.put("maxPlayers", room.getMaxPlayers() != null ? room.getMaxPlayers() : 2);
+                    roomInfo.put("currentPlayers", currentPlayers != null ? currentPlayers.intValue() : 1);
+                    roomInfo.put("creatorId", room.getCreatorId());
+                    roomInfo.put("creatorName", creator != null ? creator.getUsername() : "未知");
+                    roomInfo.put("creatorAvatar", creator != null && creator.getAvatar() != null 
+                            ? creator.getAvatar() : "/image/default-avatar.jpg");
+                    // startTime可能为null（房间创建但游戏未开始），使用当前时间作为兜底
+                    roomInfo.put("createTime", room.getStartTime() != null ? room.getStartTime() : LocalDateTime.now());
+
+                    roomList.add(roomInfo);
+                } catch (Exception e) {
+                    log.warn("解析房间数据失败: {}", e.getMessage());
+                }
+            }
+
+            result.put("success", true);
+            result.put("rooms", roomList);
+        } catch (Exception e) {
+            log.error("获取房间列表失败: {}", e.getMessage());
+            result.put("success", false);
+            result.put("message", "获取房间列表失败");
+            result.put("rooms", roomList);
+        }
+
+        return result;
+    }
+
     public Map<String, Object> createRoom(Map<String, Object> request, Long currentUserId) {
         String roomCode = (String) request.get("roomCode");
         String gameName = (String) request.get("gameName");
@@ -50,12 +120,19 @@ public class GameRoomService {
             throw new BusinessException(400, "单机游戏无需创建房间");
         }
 
+        // 检查用户是否已在其他房间中
+        String existingRoom = findUserInOtherRoom(currentUserId, null);
+        if (existingRoom != null) {
+            throw new BusinessException(400, "您已在房间 " + existingRoom + " 中，请先退出后再创建新房间");
+        }
+
         GameRoom room = new GameRoom();
         room.setRoomCode(roomCode);
         room.setGameName(gameName);
         room.setStatus(status);
         room.setCreatorId(currentUserId);
         room.setIsPrivate(isPrivate);
+        room.setStartTime(LocalDateTime.now()); // 设置房间创建时间
 
         // 根据游戏类型设置游戏配置（仅多人游戏）
         try {
@@ -142,7 +219,181 @@ public class GameRoomService {
         result.put("roomId", room.getId());
         result.put("room", room);
         result.put("success", true);
+        
+        // 广播房间列表更新
+        broadcastRoomListUpdate();
+        
         return result;
+    }
+
+    /**
+     * 加入房间（带分布式锁防止并发）
+     */
+    public Map<String, Object> joinRoom(Map<String, Object> request, Long currentUserId) {
+        String roomCode = (String) request.get("roomCode");
+        
+        Map<String, Object> result = new HashMap<>();
+        String lockKey = "lock:room:join:" + roomCode;
+
+        try {
+            // 获取分布式锁，防止并发加入
+            Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "locked", 5, TimeUnit.SECONDS);
+            if (lockAcquired == null || !lockAcquired) {
+                result.put("success", false);
+                result.put("message", "房间正在处理其他请求，请稍后重试");
+                return result;
+            }
+
+            // 检查用户是否已在其他房间中
+            String existingRoom = findUserInOtherRoom(currentUserId, roomCode);
+            if (existingRoom != null) {
+                result.put("success", false);
+                result.put("message", "您已在房间 " + existingRoom + " 中，请先退出后再加入其他房间");
+                return result;
+            }
+
+            // 检查房间是否存在
+            String roomKey = redisKeyManager.buildRoomKey(roomCode);
+            Object roomObj = redisTemplate.opsForValue().get(roomKey);
+            if (roomObj == null) {
+                result.put("success", false);
+                result.put("message", "房间不存在");
+                return result;
+            }
+            GameRoom room = objectMapper.convertValue(roomObj, GameRoom.class);
+
+            // 检查房间状态
+            if (room.getStatus() != null && room.getStatus() == 1) {
+                result.put("success", false);
+                result.put("message", "房间正在游戏中，无法加入");
+                return result;
+            }
+
+            // 检查房间是否已满
+            String playerKey = redisKeyManager.buildPlayerKey(roomCode);
+            Long playerCount = redisTemplate.opsForHash().size(playerKey);
+            int maxPlayers = room.getMaxPlayers() != null ? room.getMaxPlayers() : 2;
+            
+            if (playerCount >= maxPlayers) {
+                // 检查是否有AI玩家（真人玩家可以替换AI）
+                List<String> aiKeys = findAIPlayerKeys(playerKey);
+
+                if (!aiKeys.isEmpty()) {
+                    // 房间已满但有AI，移除第一个AI为真人玩家让位
+                    String aiKeyToRemove = aiKeys.getFirst();
+                    redisTemplate.opsForHash().delete(playerKey, aiKeyToRemove);
+
+                    // 推送AI被移除消息
+                    Map<String, Object> kickMessage = new HashMap<>();
+                    kickMessage.put("type", "memberLeft");
+                    kickMessage.put("userId", Long.parseLong(aiKeyToRemove));
+                    kickMessage.put("username", "AI Player");
+                    kickMessage.put("message", "AI Player 已退出房间，真人玩家加入");
+
+                    messagingTemplate.convertAndSend("/topic/room/" + roomCode, kickMessage);
+
+                    // 重新计算玩家数
+                    playerCount = redisTemplate.opsForHash().size(playerKey);
+                } else {
+                    // 房间已满且没有AI，拒绝加入
+                    result.put("success", false);
+                    result.put("message", "房间已满");
+                    return result;
+                }
+            }
+
+            // 检查用户是否已在房间中
+            Object existingPlayer = redisTemplate.opsForHash().get(playerKey, String.valueOf(currentUserId));
+            if (existingPlayer != null) {
+                result.put("success", false);
+                result.put("message", "您已在该房间中");
+                return result;
+            }
+
+            // 获取用户信息
+            User user = userMapper.selectById(currentUserId);
+            if (user == null) {
+                result.put("success", false);
+                result.put("message", "用户信息不存在");
+                return result;
+            }
+
+            // 构造玩家对象
+            RoomPlayer player = new RoomPlayer();
+            player.setRoomId(null);
+            player.setUserId(currentUserId);
+            player.setIsAi(0);
+            player.setAiType(null);
+            player.setAiConfig(null);
+
+            // 根据队伍模式分配队伍
+            int teamMode = room.getTeamMode() != null ? room.getTeamMode() : 0;
+            if (teamMode == 1) {
+                player.setTeamId(2); // 1v1模式：加入者在队伍2
+            } else if (teamMode >= 2) {
+                player.setTeamId(2); // 多人队伍模式：默认分配到队伍2
+            } else {
+                player.setTeamId(0); // 无队伍模式
+            }
+
+            player.setIsReady(0);
+            player.setPlayerRole("member");
+            player.setPosition(playerCount.intValue() + 1);
+            player.setKill(0);
+            player.setDeath(0);
+            player.setAssist(0);
+            player.setJoinTime(LocalDateTime.now());
+            player.setLeaveTime(null);
+
+            // 将玩家加入房间
+            redisTemplate.opsForHash().put(playerKey, String.valueOf(currentUserId), player);
+
+            // 刷新TTL
+            redisKeyManager.refreshRoomTTL(roomCode);
+
+            // 推送成员加入消息到房间
+            Map<String, Object> joinMessage = new HashMap<>();
+            joinMessage.put("type", "memberJoined");
+            joinMessage.put("userId", currentUserId);
+            joinMessage.put("username", user.getUsername());
+            joinMessage.put("avatar", user.getAvatar() != null ? user.getAvatar() : "/image/default-avatar.jpg");
+            joinMessage.put("teamId", player.getTeamId());
+            joinMessage.put("position", player.getPosition());
+            joinMessage.put("message", user.getUsername() + " 已加入房间");
+
+            messagingTemplate.convertAndSend("/topic/room/" + roomCode, joinMessage);
+
+            // 广播房间列表更新
+            broadcastRoomListUpdate();
+
+            result.put("success", true);
+            result.put("room", room);
+            result.put("message", "加入房间成功");
+
+        } catch (Exception e) {
+            log.error("加入房间失败: {}", e.getMessage());
+            result.put("success", false);
+            result.put("message", "加入房间失败: " + e.getMessage());
+        } finally {
+            // 释放锁
+            redisTemplate.delete(lockKey);
+        }
+
+        return result;
+    }
+
+    /**
+     * 广播房间列表更新（通知所有在房间列表页面的用户刷新）
+     */
+    private void broadcastRoomListUpdate() {
+        try {
+            Map<String, Object> updateMessage = new HashMap<>();
+            updateMessage.put("type", "roomListUpdated");
+            updateMessage.put("timestamp", System.currentTimeMillis());
+            messagingTemplate.convertAndSend("/topic/roomList", updateMessage);
+        } catch (Exception e) {
+            log.warn("广播房间列表更新失败: {}", e.getMessage());
+        }
     }
 
     public Map<String, Object> leaveRoom(Map<String, Object> request, Long currentUserId) {
@@ -191,6 +442,9 @@ public class GameRoomService {
             result.put("roomDestroyed", false);
             result.put("message", "已退出房间");
         }
+
+        // 广播房间列表更新
+        broadcastRoomListUpdate();
 
         result.put("success", true);
         return result;
@@ -255,8 +509,17 @@ public class GameRoomService {
         long inviterId = Long.parseLong(request.get("inviterId").toString());
 
         Map<String, Object> result = new HashMap<>();
+        String lockKey = "lock:room:join:" + roomCode; // 与joinRoom使用同一把锁
 
         try {
+            // 获取分布式锁，防止并发加入
+            Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "locked", 5, TimeUnit.SECONDS);
+            if (lockAcquired == null || !lockAcquired) {
+                result.put("success", false);
+                result.put("message", "房间正在处理其他请求，请稍后重试");
+                return result;
+            }
+
             // 1. 检查房间是否存在
             String roomKey = redisKeyManager.buildRoomKey(roomCode);
             Object roomObj = redisTemplate.opsForValue().get(roomKey);
@@ -267,8 +530,31 @@ public class GameRoomService {
             }
             GameRoom room = objectMapper.convertValue(roomObj, GameRoom.class);
 
-            // 2. 检查房间是否已满
+            // 2. 检查房间状态
+            if (room.getStatus() != null && room.getStatus() == 1) {
+                result.put("success", false);
+                result.put("message", "房间正在游戏中，无法加入");
+                return result;
+            }
+
+            // 3. 检查用户是否已在房间中
             String playerKey = redisKeyManager.buildPlayerKey(roomCode);
+            Object existingPlayer = redisTemplate.opsForHash().get(playerKey, String.valueOf(userId));
+            if (existingPlayer != null) {
+                result.put("success", false);
+                result.put("message", "您已在该房间中");
+                return result;
+            }
+
+            // 检查用户是否已在其他房间中
+            String existingRoom = findUserInOtherRoom(userId, roomCode);
+            if (existingRoom != null) {
+                result.put("success", false);
+                result.put("message", "您已在房间 " + existingRoom + " 中，请先退出后再加入其他房间");
+                return result;
+            }
+
+            // 4. 检查房间是否已满
             Long playerCount = redisTemplate.opsForHash().size(playerKey);
 
             // 使用房间配置的最大玩家数判断
@@ -301,7 +587,7 @@ public class GameRoomService {
                 }
             }
 
-            // 3. 获取用户信息
+            // 5. 获取用户信息
             User user = userMapper.selectById(userId);
             if (user == null) {
                 result.put("success", false);
@@ -309,7 +595,7 @@ public class GameRoomService {
                 return result;
             }
 
-            // 4. 构造玩家对象
+            // 6. 构造玩家对象
             RoomPlayer player = new RoomPlayer();
             player.setRoomId(null);
             player.setUserId(userId);
@@ -346,7 +632,7 @@ public class GameRoomService {
             // 刷新所有相关 Key 的 TTL
             redisKeyManager.refreshRoomTTL(roomCode);
 
-            // 6. 推送成员加入消息到房间
+            // 8. 推送成员加入消息到房间
             Map<String, Object> joinMessage = new HashMap<>();
             joinMessage.put("type", "memberJoined");
             joinMessage.put("userId", userId);
@@ -358,7 +644,10 @@ public class GameRoomService {
 
             messagingTemplate.convertAndSend("/topic/room/" + roomCode, joinMessage);
 
-            // 7. 返回成功结果
+            // 9. 广播房间列表更新
+            broadcastRoomListUpdate();
+
+            // 10. 返回成功结果
             result.put("success", true);
             result.put("room", room);
             result.put("message", "加入房间成功");
@@ -366,6 +655,9 @@ public class GameRoomService {
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", "加入房间失败: " + e.getMessage());
+        } finally {
+            // 释放锁
+            redisTemplate.delete(lockKey);
         }
 
         return result;
@@ -492,7 +784,7 @@ public class GameRoomService {
 
         try {
             // 检查房间是否存在
-            String roomKey = "room:code:" + roomCode;
+            String roomKey = redisKeyManager.buildRoomKey(roomCode);
             Object roomObj = redisTemplate.opsForValue().get(roomKey);
             if (roomObj == null) {
                 result.put("success", false);
@@ -538,6 +830,9 @@ public class GameRoomService {
             // 广播到房间内所有成员
             messagingTemplate.convertAndSend("/topic/room/" + roomCode, kickMessage);
 
+            // 广播房间列表更新
+            broadcastRoomListUpdate();
+
             // 返回成功结果
             result.put("success", true);
             result.put("message", "已将玩家移出房间");
@@ -580,6 +875,45 @@ public class GameRoomService {
         }
 
         return aiKeys;
+    }
+
+    /**
+     * 检查用户是否已在其他房间中
+     * @param userId 用户ID
+     * @param excludeRoomCode 排除的房间号（当前要加入的房间）
+     * @return 如果用户已在其他房间，返回该房间号；否则返回null
+     */
+    private String findUserInOtherRoom(Long userId, String excludeRoomCode) {
+        try {
+            // 使用SCAN扫描所有房间玩家列表
+            Set<String> playerKeys = new HashSet<>();
+            try (var cursor = redisTemplate.scan(
+                    org.springframework.data.redis.core.ScanOptions.scanOptions()
+                            .match("room:players:*")
+                            .count(100)
+                            .build())) {
+                cursor.forEachRemaining(key -> playerKeys.add(key.toString()));
+            }
+
+            for (String playerKey : playerKeys) {
+                // 从key中提取房间号：room:players:{roomCode}
+                String roomCode = playerKey.replace("room:players:", "");
+                
+                // 跳过当前要加入的房间
+                if (roomCode.equals(excludeRoomCode)) {
+                    continue;
+                }
+
+                // 检查用户是否在该房间
+                Object playerObj = redisTemplate.opsForHash().get(playerKey, String.valueOf(userId));
+                if (playerObj != null) {
+                    return roomCode;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("检查用户房间状态失败: {}", e.getMessage());
+        }
+        return null;
     }
 
     // 生成AI显示名称（根据当前房间已有AI数量，找到第一个未使用的编号）
@@ -650,7 +984,7 @@ public class GameRoomService {
 
         try {
             // 检查房间是否存在
-            String roomKey = "room:code:" + roomCode;
+            String roomKey = redisKeyManager.buildRoomKey(roomCode);
             Object roomObj = redisTemplate.opsForValue().get(roomKey);
             if (roomObj == null) {
                 result.put("success", false);
@@ -751,6 +1085,9 @@ public class GameRoomService {
 
             messagingTemplate.convertAndSend("/topic/room/" + roomCode, joinMessage);
 
+            // 广播房间列表更新
+            broadcastRoomListUpdate();
+
             result.put("success", true);
             result.put("message", "AI已加入房间");
             result.put("aiUserId", aiUserId);
@@ -785,7 +1122,7 @@ public class GameRoomService {
             }
 
             // 检查房间是否存在
-            String roomKey = "room:code:" + roomCode;
+            String roomKey = redisKeyManager.buildRoomKey(roomCode);
             Object roomObj = redisTemplate.opsForValue().get(roomKey);
             if (roomObj == null) {
                 result.put("success", false);
@@ -890,7 +1227,7 @@ public class GameRoomService {
 
         try {
             // 检查房间是否存在
-            String roomKey = "room:code:" + roomCode;
+            String roomKey = redisKeyManager.buildRoomKey(roomCode);
             Object roomObj = redisTemplate.opsForValue().get(roomKey);
             if (roomObj == null) {
                 result.put("success", false);
@@ -993,7 +1330,7 @@ public class GameRoomService {
 
         try {
             // 检查房间是否存在
-            String roomKey = "room:code:" + roomCode;
+            String roomKey = redisKeyManager.buildRoomKey(roomCode);
             Object roomObj = redisTemplate.opsForValue().get(roomKey);
             if (roomObj == null) {
                 result.put("success", false);

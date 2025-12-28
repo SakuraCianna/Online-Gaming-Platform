@@ -3,93 +3,51 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '../../config/api'
-import { useUserStore } from '../../config/user'
 import { useRoomStore } from '../../config/room'
+import { wsService } from '../../config/websocket'
 
-// 定义组件名称，支持 keep-alive 缓存
-defineOptions({
-    name: 'GameRooms'
-})
+defineOptions({ name: 'GameRooms' })
 
 const router = useRouter()
-const userStore = useUserStore()
 const roomStore = useRoomStore()
 
-// 房间列表数据
 const rooms = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
 const selectedGame = ref('all')
 const selectedStatus = ref('all')
+const joining = ref(false) // 防止重复点击
 
-// 房间统计
-const statistics = ref({
-    totalRooms: 0,
-    waitingRooms: 0,
-    playingRooms: 0,
-    onlinePlayers: 0
-})
-
-// 游戏类型配置
 const gameTypes = [
     { value: 'all', label: '全部游戏', icon: '🎮' },
-    { value: 'gomoku', label: '五子棋', icon: '⭕️', color: '#667eea' },
-    { value: 'tank_battle', label: '坦克大战', icon: '🚗', color: '#f093fb' },
-    { value: 'minesweeper', label: '扫雷', icon: '💣', color: '#4facfe' },
-    { value: '2048', label: '2048', icon: '🎯', color: '#fa709a' }
+    { value: 'gomoku', label: '五子棋', icon: '⭕' },
+    { value: 'tank_battle', label: '坦克大战', icon: '🚗' },
+    { value: 'minesweeper', label: '扫雷', icon: '💣' },
+    { value: '2048', label: '2048', icon: '🎯' }
 ]
 
-// 房间状态配置
 const statusTypes = [
     { value: 'all', label: '全部状态' },
     { value: 'waiting', label: '等待中' },
     { value: 'playing', label: '游戏中' }
 ]
 
-// 获取游戏配置
-const getGameConfig = (gameName) => {
-    return gameTypes.find(g => g.value === gameName) || gameTypes[0]
-}
+const getGameConfig = (gameName) => gameTypes.find(g => g.value === gameName) || gameTypes[0]
+const getStatusText = (status) => ({ 0: '等待中', 1: '游戏中', 2: '已结束' }[status] || '未知')
+const getStatusType = (status) => ({ 0: 'waiting', 1: 'playing', 2: 'ended' }[status] || 'waiting')
 
-// 获取房间状态文本
-const getStatusText = (status) => {
-    const statusMap = {
-        0: '等待中',
-        1: '游戏中',
-        2: '已结束'
-    }
-    return statusMap[status] || '未知'
-}
-
-// 获取房间状态类型
-const getStatusType = (status) => {
-    const typeMap = {
-        0: 'waiting',
-        1: 'playing',
-        2: 'ended'
-    }
-    return typeMap[status] || 'waiting'
-}
-
-// 过滤后的房间列表
 const filteredRooms = computed(() => {
     let result = rooms.value
-
-    // 按游戏类型筛选
+    // 过滤掉私密房间
+    result = result.filter(room => room.isPrivate !== 1)
     if (selectedGame.value !== 'all') {
         result = result.filter(room => room.gameName === selectedGame.value)
     }
-
-    // 按状态筛选
     if (selectedStatus.value !== 'all') {
-        if (selectedStatus.value === 'waiting') {
-            result = result.filter(room => room.status === 0)
-        } else if (selectedStatus.value === 'playing') {
-            result = result.filter(room => room.status === 1)
-        }
+        result = result.filter(room => 
+            selectedStatus.value === 'waiting' ? room.status === 0 : room.status === 1
+        )
     }
-
-    // 按搜索关键词筛选
     if (searchQuery.value.trim()) {
         const query = searchQuery.value.toLowerCase()
         result = result.filter(room =>
@@ -97,80 +55,32 @@ const filteredRooms = computed(() => {
             room.creatorName?.toLowerCase().includes(query)
         )
     }
-
     return result
 })
 
-// 计算统计数据
-const updateStatistics = () => {
-    statistics.value = {
-        totalRooms: rooms.value.length,
-        waitingRooms: rooms.value.filter(r => r.status === 0).length,
-        playingRooms: rooms.value.filter(r => r.status === 1).length,
-        onlinePlayers: rooms.value.reduce((sum, r) => sum + (r.currentPlayers || 0), 0)
-    }
-}
-
-// 获取房间列表
 const fetchRooms = async () => {
     loading.value = true
     try {
         const response = await request.get('/room/list')
         if (response.data.success) {
             rooms.value = response.data.rooms || []
-            updateStatistics()
         } else {
             ElMessage.error(response.data.message || '获取房间列表失败')
+            rooms.value = []
         }
     } catch (error) {
-        console.error('获取房间列表失败:', error)
-        // 使用模拟数据
-        rooms.value = generateMockRooms()
-        updateStatistics()
+        ElMessage.error('获取房间列表失败')
+        rooms.value = []
     } finally {
         loading.value = false
     }
 }
 
-// 生成模拟数据
-const generateMockRooms = () => {
-    const mockGames = ['gomoku', 'tank_battle', 'minesweeper', '2048']
-    const mockNames = ['小明', '小红', '小刚', '小李', '小王', '小张', '小赵', '小钱']
-    const mockRooms = []
-
-    for (let i = 0; i < 12; i++) {
-        mockRooms.push({
-            id: i + 1,
-            roomCode: (1000 + Math.floor(Math.random() * 9000)).toString(),
-            gameName: mockGames[Math.floor(Math.random() * mockGames.length)],
-            creatorId: Math.floor(Math.random() * 1000),
-            creatorName: mockNames[Math.floor(Math.random() * mockNames.length)],
-            creatorAvatar: '/image/default-avatar.jpg',
-            status: Math.floor(Math.random() * 3),
-            currentPlayers: Math.floor(Math.random() * 2) + 1,
-            maxPlayers: 2,
-            isPrivate: Math.random() > 0.7 ? 1 : 0,
-            createTime: new Date(Date.now() - Math.random() * 3600000).toISOString()
-        })
-    }
-
-    return mockRooms
-}
-
-// 加入房间
 const joinRoom = async (room) => {
-    // 检查房间状态
-    if (room.status === 1) {
-        ElMessage.warning('该房间正在游戏中，无法加入')
-        return
-    }
+    if (joining.value) return
+    if (room.status === 1) return ElMessage.warning('该房间正在游戏中')
+    if (room.currentPlayers >= room.maxPlayers) return ElMessage.warning('房间已满')
 
-    if (room.currentPlayers >= room.maxPlayers) {
-        ElMessage.warning('房间已满')
-        return
-    }
-
-    // 如果是私密房间，需要输入房间码
     if (room.isPrivate === 1) {
         try {
             const { value } = await ElMessageBox.prompt('请输入房间码', '加入私密房间', {
@@ -179,23 +89,15 @@ const joinRoom = async (room) => {
                 inputPattern: /^\d{4}$/,
                 inputErrorMessage: '请输入4位数字房间码'
             })
-
-            if (value !== room.roomCode) {
-                ElMessage.error('房间码错误')
-                return
-            }
-        } catch {
-            return // 用户取消
-        }
+            if (value !== room.roomCode) return ElMessage.error('房间码错误')
+        } catch { return }
     }
 
-    // 调用加入房间接口
+    joining.value = true
     try {
         const response = await request.post('/room/join', {
-            roomCode: room.roomCode,
-            userId: userStore.userInfo?.id
+            roomCode: room.roomCode
         })
-
         if (response.data.success) {
             roomStore.setCurrentRoom(response.data.room)
             ElMessage.success('成功加入房间')
@@ -203,210 +105,134 @@ const joinRoom = async (room) => {
         } else {
             ElMessage.error(response.data.message || '加入房间失败')
         }
-    } catch (error) {
-        console.error('加入房间失败:', error)
-        ElMessage.error('加入房间失败，请稍后重试')
+    } catch {
+        ElMessage.error('加入房间失败')
+    } finally {
+        joining.value = false
     }
 }
 
-// 创建房间
-const createRoom = () => {
-    router.push('/dashboard/game-center')
+const createRoom = () => router.push('/user/games')
+const refreshRooms = () => { fetchRooms(); ElMessage.success('已刷新') }
+
+const formatTime = (time) => {
+    if (!time) return ''
+    const diff = Math.floor((Date.now() - new Date(time)) / 1000)
+    if (diff < 60) return '刚刚'
+    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
+    return `${Math.floor(diff / 3600)}小时前`
 }
 
-// 刷新房间列表
-const refreshRooms = () => {
-    fetchRooms()
-    ElMessage.success('已刷新房间列表')
+// 订阅房间列表更新
+const subscribeRoomListUpdate = () => {
+    wsService.subscribe('/topic/roomList', (message) => {
+        if (message.type === 'roomListUpdated') {
+            // 收到更新通知，刷新房间列表
+            fetchRooms()
+        }
+    })
 }
 
-// 定时刷新
 let refreshTimer = null
-
 onMounted(() => {
     fetchRooms()
-    // 每10秒自动刷新
-    refreshTimer = setInterval(() => {
-        fetchRooms()
-    }, 10000)
+    // 订阅WebSocket房间列表更新
+    subscribeRoomListUpdate()
+    // 备用定时刷新（30秒一次，作为兜底）
+    refreshTimer = setInterval(fetchRooms, 30000)
 })
 
 onUnmounted(() => {
-    if (refreshTimer) {
-        clearInterval(refreshTimer)
-    }
+    if (refreshTimer) clearInterval(refreshTimer)
+    // 取消订阅
+    wsService.unsubscribe('/topic/roomList')
 })
-
-// 格式化时间
-const formatTime = (time) => {
-    if (!time) return ''
-    const date = new Date(time)
-    const now = new Date()
-    const diff = Math.floor((now - date) / 1000) // 秒
-
-    if (diff < 60) return '刚刚'
-    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
-    return `${Math.floor(diff / 86400)}天前`
-}
 </script>
 
 <template>
     <div class="game-rooms">
-        <!-- 顶部统计卡片 -->
-        <div class="statistics-bar">
-            <div class="stat-card">
-                <div class="stat-icon">🏠</div>
-                <div class="stat-content">
-                    <div class="stat-value">{{ statistics.totalRooms }}</div>
-                    <div class="stat-label">在线房间</div>
-                </div>
+        <!-- 页面标题 -->
+        <div class="page-header">
+            <h2>游戏房间</h2>
+        </div>
+
+        <!-- 筛选栏 - 一行显示 -->
+        <div class="filter-bar">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input v-model="searchQuery" type="text" placeholder="搜索房间码或玩家..." />
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">⏳</div>
-                <div class="stat-content">
-                    <div class="stat-value">{{ statistics.waitingRooms }}</div>
-                    <div class="stat-label">等待中</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">🎮</div>
-                <div class="stat-content">
-                    <div class="stat-value">{{ statistics.playingRooms }}</div>
-                    <div class="stat-label">游戏中</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">👥</div>
-                <div class="stat-content">
-                    <div class="stat-value">{{ statistics.onlinePlayers }}</div>
-                    <div class="stat-label">在线玩家</div>
-                </div>
+
+            <select v-model="selectedGame" class="filter-select">
+                <option v-for="game in gameTypes" :key="game.value" :value="game.value">
+                    {{ game.icon }} {{ game.label }}
+                </option>
+            </select>
+
+            <select v-model="selectedStatus" class="filter-select">
+                <option v-for="status in statusTypes" :key="status.value" :value="status.value">
+                    {{ status.label }}
+                </option>
+            </select>
+
+            <button class="btn-refresh" @click="refreshRooms" :disabled="loading">🔄 刷新</button>
+            <div class="create-section">
+                <button class="btn-create" @click="createRoom">➕ 创建房间</button>
+                <span class="create-tip">私密房间不显示在列表里</span>
             </div>
         </div>
 
-        <!-- 操作栏 -->
-        <div class="action-bar">
-            <div class="left-actions">
-                <!-- 搜索框 -->
-                <div class="search-box">
-                    <span class="search-icon">🔍</span>
-                    <input v-model="searchQuery" type="text" placeholder="搜索房间码或玩家名..." class="search-input" />
+        <!-- 房间列表 - 行式布局 -->
+        <div class="rooms-list" v-loading="loading">
+            <div v-if="filteredRooms.length === 0 && !loading" class="empty-state">
+                <span>🏠</span>
+                <p>暂无房间</p>
+            </div>
+
+            <div v-for="room in filteredRooms" :key="room.id" class="room-row" :class="getStatusType(room.status)">
+                <!-- 游戏类型 -->
+                <div class="room-game">
+                    <span class="game-icon">{{ getGameConfig(room.gameName).icon }}</span>
+                    <span class="game-name">{{ getGameConfig(room.gameName).label }}</span>
                 </div>
 
-                <!-- 游戏类型筛选 -->
-                <div class="filter-group">
-                    <button v-for="game in gameTypes" :key="game.value"
-                        :class="['filter-btn', { active: selectedGame === game.value }]"
-                        @click="selectedGame = game.value">
-                        <span class="btn-icon">{{ game.icon }}</span>
-                        <span>{{ game.label }}</span>
+                <!-- 房间码 -->
+                <div class="room-code">
+                    <span class="label">房间码</span>
+                    <span class="code">{{ room.roomCode }}</span>
+                </div>
+
+                <!-- 房主信息 -->
+                <div class="room-creator">
+                    <img :src="room.creatorAvatar || '/image/default-avatar.jpg'" class="avatar" />
+                    <span class="name">{{ room.creatorName }}</span>
+                </div>
+
+                <!-- 人数 -->
+                <div class="room-players">
+                    <span>👥 {{ room.currentPlayers || 1 }}/{{ room.maxPlayers }}</span>
+                </div>
+
+                <!-- 时间 -->
+                <div class="room-time">
+                    <span>🕐 {{ formatTime(room.createTime) }}</span>
+                </div>
+
+                <!-- 状态 -->
+                <div class="room-status" :class="getStatusType(room.status)">
+                    {{ getStatusText(room.status) }}
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="room-action">
+                    <button 
+                        class="btn-join" 
+                        :class="getStatusType(room.status)"
+                        :disabled="room.status !== 0 || room.currentPlayers >= room.maxPlayers"
+                        @click="joinRoom(room)">
+                        {{ room.status === 0 && room.currentPlayers < room.maxPlayers ? '加入' : 
+                           room.currentPlayers >= room.maxPlayers ? '已满' : '游戏中' }}
                     </button>
-                </div>
-
-                <!-- 状态筛选 -->
-                <div class="filter-group">
-                    <button v-for="status in statusTypes" :key="status.value"
-                        :class="['filter-btn', { active: selectedStatus === status.value }]"
-                        @click="selectedStatus = status.value">
-                        {{ status.label }}
-                    </button>
-                </div>
-            </div>
-
-            <div class="right-actions">
-                <button class="action-btn refresh-btn" @click="refreshRooms" :disabled="loading">
-                    <span class="btn-icon">🔄</span>
-                    刷新
-                </button>
-                <button class="action-btn create-btn" @click="createRoom">
-                    <span class="btn-icon">➕</span>
-                    创建房间
-                </button>
-            </div>
-        </div>
-
-        <!-- 房间列表 -->
-        <div class="rooms-container">
-            <div v-if="loading" class="loading-state">
-                <div class="loading-spinner"></div>
-                <p>加载中...</p>
-            </div>
-
-            <div v-else-if="filteredRooms.length === 0" class="empty-state">
-                <div class="empty-icon">🏠</div>
-                <h3>暂无房间</h3>
-                <p>当前没有符合条件的游戏房间</p>
-                <button class="create-room-btn" @click="createRoom">
-                    创建新房间
-                </button>
-            </div>
-
-            <div v-else class="rooms-grid">
-                <div v-for="room in filteredRooms" :key="room.id" class="room-card" :class="getStatusType(room.status)">
-                    <!-- 房间头部 -->
-                    <div class="room-header" :style="{ background: getGameConfig(room.gameName).color || '#667eea' }">
-                        <div class="game-info">
-                            <span class="game-icon">{{ getGameConfig(room.gameName).icon }}</span>
-                            <span class="game-name">{{ getGameConfig(room.gameName).label }}</span>
-                        </div>
-                        <div class="room-badges">
-                            <span v-if="room.isPrivate === 1" class="badge private-badge" title="私密房间">
-                                🔒
-                            </span>
-                            <span class="badge status-badge" :class="getStatusType(room.status)">
-                                {{ getStatusText(room.status) }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- 房间内容 -->
-                    <div class="room-body">
-                        <div class="room-code-section">
-                            <span class="label">房间码:</span>
-                            <span class="room-code">{{ room.roomCode }}</span>
-                        </div>
-
-                        <div class="creator-info">
-                            <img :src="room.creatorAvatar || '/image/default-avatar.jpg'" :alt="room.creatorName"
-                                class="creator-avatar" />
-                            <div class="creator-details">
-                                <div class="creator-name">{{ room.creatorName }}</div>
-                                <div class="creator-label">房主</div>
-                            </div>
-                        </div>
-
-                        <div class="room-meta">
-                            <div class="meta-item">
-                                <span class="meta-icon">👥</span>
-                                <span class="meta-text">{{ room.currentPlayers || 1 }}/{{ room.maxPlayers }}</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">🕐</span>
-                                <span class="meta-text">{{ formatTime(room.createTime) }}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 房间底部操作 -->
-                    <div class="room-footer">
-                        <button class="join-btn" :class="getStatusType(room.status)"
-                            :disabled="room.status === 1 || room.currentPlayers >= room.maxPlayers"
-                            @click="joinRoom(room)">
-                            <span v-if="room.status === 0 && room.currentPlayers < room.maxPlayers">
-                                <span class="btn-icon">🚀</span> 加入房间
-                            </span>
-                            <span v-else-if="room.status === 1">
-                                <span class="btn-icon">👁️</span> 观战
-                            </span>
-                            <span v-else-if="room.currentPlayers >= room.maxPlayers">
-                                <span class="btn-icon">🔒</span> 房间已满
-                            </span>
-                            <span v-else>
-                                已结束
-                            </span>
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
@@ -415,660 +241,401 @@ const formatTime = (time) => {
 
 <style scoped>
 .game-rooms {
-    padding: 24px;
-    max-width: 1400px;
-    margin: 0 auto;
+    padding: 20px;
     height: 100%;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-/* 统计栏 */
-.statistics-bar {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+.page-header {
+    margin-bottom: 16px;
 }
 
-.stat-card {
-    background: white;
-    border-radius: 16px;
-    padding: 20px;
+.page-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+/* 筛选栏 */
+.filter-bar {
     display: flex;
     align-items: center;
     gap: 16px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-    transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
-}
-
-.stat-icon {
-    font-size: 2.5rem;
-    width: 60px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    padding: 16px 20px;
+    background: #fff;
     border-radius: 12px;
-}
-
-.stat-content {
-    flex: 1;
-}
-
-.stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #232946;
-    line-height: 1;
-    margin-bottom: 4px;
-}
-
-.stat-label {
-    font-size: 0.875rem;
-    color: #6b7280;
-}
-
-/* 操作栏 */
-.action-bar {
-    background: white;
-    border-radius: 16px;
-    padding: 20px;
-    margin-bottom: 24px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    margin-bottom: 20px;
     flex-wrap: wrap;
-}
-
-.left-actions {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    flex: 1;
 }
 
 .search-box {
     display: flex;
     align-items: center;
-    background: #f8f9fa;
-    border: 2px solid #e9ecef;
-    border-radius: 12px;
+    gap: 10px;
     padding: 10px 16px;
-    gap: 8px;
-    min-width: 250px;
-    transition: all 0.3s ease;
-}
-
-.search-box:focus-within {
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.search-icon {
-    font-size: 1.25rem;
-}
-
-.search-input {
+    background: #f5f5f5;
+    border-radius: 10px;
     flex: 1;
+    min-width: 200px;
+    max-width: 300px;
+}
+
+.search-box input {
     border: none;
     background: transparent;
     outline: none;
-    font-size: 0.95rem;
-    color: #232946;
+    font-size: 15px;
+    width: 100%;
 }
 
-.search-input::placeholder {
-    color: #9ca3af;
+.search-icon {
+    font-size: 16px;
 }
 
-.filter-group {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.filter-btn {
+.filter-select {
     padding: 10px 16px;
-    border: 2px solid #e9ecef;
-    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
     border-radius: 10px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #6b7280;
+    font-size: 15px;
+    background: #fff;
     cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    min-width: 140px;
 }
 
-.filter-btn:hover {
+.filter-select:focus {
+    outline: none;
     border-color: #667eea;
-    color: #667eea;
-    background: #f5f6ff;
 }
 
-.filter-btn.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: #667eea;
-    color: white;
-}
-
-.filter-btn .btn-icon {
-    font-size: 1.1rem;
-}
-
-.right-actions {
-    display: flex;
-    gap: 12px;
-}
-
-.action-btn {
+.btn-refresh, .btn-create {
     padding: 10px 20px;
     border: none;
     border-radius: 10px;
-    font-size: 0.95rem;
+    font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    transition: all 0.2s;
 }
 
-.refresh-btn {
-    background: #f8f9fa;
-    border: 2px solid #e9ecef;
-    color: #6b7280;
+.btn-refresh {
+    background: #f5f5f5;
+    color: #666;
 }
 
-.refresh-btn:hover:not(:disabled) {
-    background: #e9ecef;
-    transform: translateY(-2px);
+.btn-refresh:hover:not(:disabled) {
+    background: #e8e8e8;
 }
 
-.refresh-btn:disabled {
+.btn-refresh:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
 
-.create-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+.btn-create {
+    background: #f5f5f5;
+    color: #666;
 }
 
-.create-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+.btn-create:hover {
+    background: #e8e8e8;
 }
 
-/* 房间容器 */
-.rooms-container {
-    min-height: 400px;
+.create-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-.loading-state,
+.create-tip {
+    font-size: 12px;
+    color: #bbb;
+}
+
+/* 房间列表 */
+.rooms-list {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
 .empty-state {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 80px 20px;
-    text-align: center;
+    color: #999;
 }
 
-.loading-spinner {
-    width: 50px;
-    height: 50px;
-    border: 5px solid #f3f3f3;
-    border-top: 5px solid #667eea;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 20px;
+.empty-state span {
+    font-size: 64px;
+    margin-bottom: 16px;
 }
 
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
-.empty-icon {
-    font-size: 5rem;
-    margin-bottom: 20px;
-    opacity: 0.5;
-}
-
-.empty-state h3 {
-    font-size: 1.5rem;
-    color: #232946;
-    margin: 0 0 8px 0;
-}
-
-.empty-state p {
-    color: #6b7280;
-    margin: 0 0 24px 0;
-}
-
-.create-room-btn {
-    padding: 12px 32px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
+/* 房间行 */
+.room-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 18px 24px;
+    background: #fff;
     border-radius: 12px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    transition: all 0.2s;
+    border-left: 4px solid transparent;
 }
 
-.create-room-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+.room-row:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
 }
 
-/* 房间网格 */
-.rooms-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 20px;
+.room-row.waiting {
+    border-left-color: #10b981;
 }
 
-/* 房间卡片 */
-.room-card {
-    background: white;
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
+.room-row.playing {
+    border-left-color: #f59e0b;
 }
 
-.room-card:hover {
-    transform: translateY(-6px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+.room-row.ended {
+    border-left-color: #9ca3af;
 }
 
-.room-header {
-    padding: 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.game-info {
+/* 游戏类型 */
+.room-game {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    min-width: 120px;
 }
 
 .game-icon {
-    font-size: 1.5rem;
+    font-size: 28px;
 }
 
 .game-name {
-    font-size: 1rem;
+    font-size: 16px;
     font-weight: 600;
+    color: #333;
 }
 
-.room-badges {
-    display: flex;
-    gap: 6px;
-}
-
-.badge {
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    background: rgba(255, 255, 255, 0.25);
-    backdrop-filter: blur(10px);
-}
-
-.private-badge {
-    font-size: 0.9rem;
-}
-
-.status-badge.waiting {
-    background: rgba(16, 185, 129, 0.9);
-}
-
-.status-badge.playing {
-    background: rgba(245, 158, 11, 0.9);
-}
-
-.status-badge.ended {
-    background: rgba(107, 114, 128, 0.9);
-}
-
-.room-body {
-    padding: 20px;
-    flex: 1;
-}
-
-.room-code-section {
+/* 房间码 */
+.room-code {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 16px;
-    padding: 12px;
-    background: #f8f9fa;
-    border-radius: 10px;
+    min-width: 140px;
 }
 
-.room-code-section .label {
-    font-size: 0.875rem;
-    color: #6b7280;
+.room-code .label {
+    font-size: 14px;
+    color: #999;
 }
 
-.room-code {
-    font-size: 1.25rem;
+.room-code .code {
+    font-size: 18px;
     font-weight: 700;
     color: #667eea;
     letter-spacing: 2px;
 }
 
-.creator-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #e9ecef;
+.private-icon {
+    font-size: 14px;
 }
 
-.creator-avatar {
-    width: 48px;
-    height: 48px;
+/* 房主 */
+.room-creator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 120px;
+}
+
+.room-creator .avatar {
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid #e9ecef;
+    border: 2px solid #e5e7eb;
 }
 
-.creator-details {
-    flex: 1;
+.room-creator .name {
+    font-size: 15px;
+    font-weight: 500;
+    color: #333;
 }
 
-.creator-name {
-    font-size: 1rem;
+/* 人数 */
+.room-players {
+    font-size: 15px;
+    color: #666;
+    min-width: 80px;
+}
+
+/* 时间 */
+.room-time {
+    font-size: 14px;
+    color: #999;
+    min-width: 100px;
+}
+
+/* 状态 */
+.room-status {
+    padding: 6px 14px;
+    border-radius: 16px;
+    font-size: 14px;
     font-weight: 600;
-    color: #232946;
-    margin-bottom: 2px;
+    min-width: 70px;
+    text-align: center;
 }
 
-.creator-label {
-    font-size: 0.75rem;
+.room-status.waiting {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.room-status.playing {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.room-status.ended {
+    background: #f3f4f6;
     color: #6b7280;
 }
 
-.room-meta {
-    display: flex;
-    gap: 16px;
+/* 操作按钮 */
+.room-action {
+    margin-left: auto;
 }
 
-.meta-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.875rem;
-    color: #6b7280;
-}
-
-.meta-icon {
-    font-size: 1.1rem;
-}
-
-.room-footer {
-    padding: 0 20px 20px 20px;
-}
-
-.join-btn {
-    width: 100%;
-    padding: 12px;
+.btn-join {
+    padding: 10px 24px;
     border: none;
-    border-radius: 10px;
-    font-size: 1rem;
+    border-radius: 8px;
+    font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
+    transition: all 0.2s;
 }
 
-.join-btn.waiting {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+.btn-join.waiting {
+    background: #10b981;
+    color: #fff;
 }
 
-.join-btn.waiting:hover:not(:disabled) {
-    transform: scale(1.02);
-    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
+.btn-join.waiting:hover:not(:disabled) {
+    background: #059669;
 }
 
-.join-btn.playing {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    color: white;
-    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-}
-
-.join-btn.playing:hover:not(:disabled) {
-    transform: scale(1.02);
-    box-shadow: 0 6px 16px rgba(245, 158, 11, 0.5);
-}
-
-.join-btn:disabled {
-    background: #e9ecef;
+.btn-join.playing, .btn-join:disabled {
+    background: #e5e7eb;
     color: #9ca3af;
     cursor: not-allowed;
-    box-shadow: none;
 }
 
-.join-btn .btn-icon {
-    font-size: 1.1rem;
-}
-
-/* 响应式设计 */
-@media (max-width: 1200px) {
-    .statistics-bar {
-        grid-template-columns: repeat(2, 1fr);
+/* 响应式 */
+@media (max-width: 900px) {
+    .room-time {
+        display: none;
     }
 }
 
 @media (max-width: 768px) {
-    .game-rooms {
-        padding: 16px;
-    }
-
-    .statistics-bar {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .action-bar {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .left-actions {
-        flex-direction: column;
+    .filter-bar {
+        gap: 8px;
     }
 
     .search-box {
+        max-width: none;
+        flex: 1 1 100%;
+    }
+
+    .filter-select {
+        flex: 1;
+        min-width: 100px;
+    }
+
+    .room-row {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .room-game {
+        min-width: 80px;
+    }
+
+    .room-code {
         min-width: auto;
     }
 
-    .right-actions {
+    .room-creator {
+        min-width: auto;
+    }
+
+    .room-players, .room-time {
+        display: none;
+    }
+
+    .room-action {
+        margin-left: 0;
         width: 100%;
     }
 
-    .action-btn {
-        flex: 1;
-    }
-
-    .rooms-grid {
-        grid-template-columns: 1fr;
+    .btn-join {
+        width: 100%;
+        padding: 10px;
     }
 }
 
-/* 移动端小屏幕适配 */
 @media (max-width: 480px) {
     .game-rooms {
         padding: 12px;
         padding-bottom: 80px;
     }
 
-    .statistics-bar {
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
+    .page-header h2 {
+        font-size: 18px;
     }
 
-    .stat-card {
-        padding: 14px;
-        gap: 10px;
+    .filter-bar {
+        padding: 10px 12px;
     }
 
-    .stat-icon {
-        font-size: 1.8rem;
-        width: 44px;
-        height: 44px;
-    }
-
-    .stat-value {
-        font-size: 1.4rem;
-    }
-
-    .stat-label {
-        font-size: 0.75rem;
-    }
-
-    .action-bar {
-        padding: 14px;
-        gap: 12px;
-    }
-
-    .search-box {
+    .btn-refresh, .btn-create {
         padding: 8px 12px;
+        font-size: 13px;
     }
 
-    .search-input {
-        font-size: 14px;
-    }
-
-    .filter-group {
-        width: 100%;
-        overflow-x: auto;
-        flex-wrap: nowrap;
-        padding-bottom: 4px;
-    }
-
-    .filter-btn {
-        padding: 8px 12px;
-        font-size: 0.8rem;
-        white-space: nowrap;
-        flex-shrink: 0;
-    }
-
-    .filter-btn .btn-icon {
-        font-size: 1rem;
-    }
-
-    .right-actions {
-        gap: 8px;
-    }
-
-    .action-btn {
-        padding: 10px 14px;
-        font-size: 0.85rem;
-    }
-
-    .room-card {
-        border-radius: 12px;
-    }
-
-    .room-header {
-        padding: 12px;
+    .room-row {
+        padding: 10px 12px;
     }
 
     .game-icon {
-        font-size: 1.2rem;
+        font-size: 18px;
     }
 
     .game-name {
-        font-size: 0.9rem;
+        font-size: 13px;
     }
 
-    .badge {
-        padding: 3px 8px;
-        font-size: 0.7rem;
+    .room-code .code {
+        font-size: 14px;
     }
 
-    .room-body {
-        padding: 14px;
+    .room-creator .avatar {
+        width: 24px;
+        height: 24px;
     }
 
-    .room-code-section {
-        padding: 10px;
-    }
-
-    .room-code {
-        font-size: 1.1rem;
-    }
-
-    .creator-avatar {
-        width: 40px;
-        height: 40px;
-    }
-
-    .creator-name {
-        font-size: 0.9rem;
-    }
-
-    .meta-item {
-        font-size: 0.8rem;
-    }
-
-    .room-footer {
-        padding: 0 14px 14px;
-    }
-
-    .join-btn {
-        padding: 10px;
-        font-size: 0.9rem;
-    }
-
-    .empty-icon {
-        font-size: 3.5rem;
-    }
-
-    .empty-state h3 {
-        font-size: 1.2rem;
-    }
-
-    .empty-state p {
-        font-size: 0.9rem;
-    }
-
-    .create-room-btn {
-        padding: 10px 24px;
-        font-size: 0.9rem;
+    .room-creator .name {
+        font-size: 13px;
     }
 }
 </style>

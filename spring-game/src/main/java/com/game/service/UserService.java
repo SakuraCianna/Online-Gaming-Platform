@@ -6,11 +6,19 @@ import com.game.entity.User;
 import com.game.exception.BusinessException;
 import com.game.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -18,6 +26,149 @@ import java.util.Map;
 public class UserService {
     private final UserMapper userMapper;
     private final GameRecordService gameRecordService;
+
+    // 头像上传目录，可在配置文件中配置
+    @Value("${file.upload.avatar-path:uploads/avatars}")
+    private String avatarUploadPath;
+
+    /**
+     * 上传用户头像
+     */
+    public Map<String, Object> uploadAvatar(Long userId, MultipartFile file) {
+        Map<String, Object> response = new HashMap<>();
+
+        // 校验用户
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(404, "用户不存在");
+        }
+
+        // 校验文件
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(400, "请选择要上传的文件");
+        }
+
+        // 校验文件类型
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new BusinessException(400, "只支持上传图片文件");
+        }
+
+        // 校验文件大小（5MB）
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new BusinessException(400, "图片大小不能超过5MB");
+        }
+
+        try {
+            // 生成唯一文件名
+            String originalFilename = file.getOriginalFilename();
+            String extension = originalFilename != null && originalFilename.contains(".")
+                    ? originalFilename.substring(originalFilename.lastIndexOf("."))
+                    : ".jpg";
+            String newFilename = UUID.randomUUID().toString() + extension;
+
+            // 创建上传目录
+            Path uploadDir = Paths.get(avatarUploadPath);
+            if (!Files.exists(uploadDir)) {
+                Files.createDirectories(uploadDir);
+            }
+
+            // 保存文件
+            Path filePath = uploadDir.resolve(newFilename);
+            Files.copy(file.getInputStream(), filePath);
+
+            // 更新用户头像路径
+            String avatarUrl = "/uploads/avatars/" + newFilename;
+            user.setAvatar(avatarUrl);
+            user.setUpdatedTime(LocalDateTime.now());
+            userMapper.updateById(user);
+
+            response.put("success", true);
+            response.put("message", "头像上传成功");
+            response.put("avatar", avatarUrl);
+            return response;
+
+        } catch (IOException e) {
+            throw new BusinessException(500, "头像上传失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 更新用户基本信息
+     */
+    public Map<String, Object> updateUserInfo(Long userId, String username) {
+        Map<String, Object> response = new HashMap<>();
+
+        // 校验用户
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(404, "用户不存在");
+        }
+
+        // 校验用户名
+        if (username == null || username.trim().isEmpty()) {
+            throw new BusinessException(400, "用户名不能为空");
+        }
+        if (username.length() > 20) {
+            throw new BusinessException(400, "用户名不能超过20个字符");
+        }
+
+        // 检查用户名是否已被其他用户使用
+        if (Boolean.TRUE.equals(userMapper.findUsername(username.trim(), user.getEmail()))) {
+            throw new BusinessException(400, "该用户名已被使用");
+        }
+
+        // 更新用户信息
+        user.setUsername(username.trim());
+        user.setUpdatedTime(LocalDateTime.now());
+        userMapper.updateById(user);
+
+        response.put("success", true);
+        response.put("message", "信息更新成功");
+        return response;
+    }
+
+    /**
+     * 修改用户密码
+     */
+    public Map<String, Object> changePassword(Long userId, String oldPassword, String newPassword) {
+        Map<String, Object> response = new HashMap<>();
+
+        // 校验用户
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(404, "用户不存在");
+        }
+
+        // 校验旧密码
+        if (oldPassword == null || oldPassword.isEmpty()) {
+            throw new BusinessException(400, "请输入当前密码");
+        }
+
+        // 获取用户密码（需要单独查询，因为 password 字段默认不查询）
+        User userWithPassword = userMapper.selectByEmail(user.getEmail());
+        if (userWithPassword == null || userWithPassword.getPassword() == null) {
+            throw new BusinessException(400, "用户信息异常");
+        }
+
+        // 验证旧密码
+        if (!PasswordUtil.matches(oldPassword, userWithPassword.getPassword())) {
+            throw new BusinessException(400, "当前密码错误");
+        }
+
+        // 校验新密码
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BusinessException(400, "新密码至少需要6位");
+        }
+
+        // 更新密码
+        String encodedPassword = PasswordUtil.encrypt(newPassword);
+        userMapper.updatePassword(user.getEmail(), encodedPassword);
+
+        response.put("success", true);
+        response.put("message", "密码修改成功");
+        return response;
+    }
 
     public Map<String, Object> RegisterService(Map<String, Object> request) {
         String email = (String) request.get("email");

@@ -27,7 +27,7 @@
               <span class="btn-icon">📷</span>
               <span>更换头像</span>
             </button>
-            <p class="avatar-tip">支持 JPG、PNG 格式，大小不超过 2MB</p>
+            <p class="avatar-tip">支持 JPG、PNG 格式，大小不超过 5MB</p>
           </div>
         </div>
       </div>
@@ -57,16 +57,7 @@
           />
           <span class="field-tip">邮箱不可修改</span>
         </div>
-        <div class="form-group">
-          <label>个性签名</label>
-          <textarea 
-            v-model="formData.signature" 
-            placeholder="写点什么介绍自己吧..."
-            maxlength="100"
-            rows="3"
-          ></textarea>
-          <span class="char-count">{{ formData.signature?.length || 0 }}/100</span>
-        </div>
+
         <button class="btn-save" :disabled="saving" @click="saveBasicInfo">
           {{ saving ? '保存中...' : '保存修改' }}
         </button>
@@ -138,7 +129,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
@@ -155,8 +146,7 @@ const changingPassword = ref(false)
 
 // 基本信息表单
 const formData = reactive({
-  username: '',
-  signature: ''
+  username: ''
 })
 
 // 密码表单
@@ -166,13 +156,12 @@ const passwordForm = reactive({
   confirmPassword: ''
 })
 
-// 初始化表单数据
-onMounted(() => {
-  if (user.value) {
-    formData.username = user.value.username || ''
-    formData.signature = user.value.signature || ''
+// 监听用户信息变化，初始化表单数据
+watch(user, (newUser) => {
+  if (newUser) {
+    formData.username = newUser.username || ''
   }
-})
+}, { immediate: true })
 
 // 触发头像上传
 function triggerAvatarUpload() {
@@ -190,23 +179,22 @@ async function handleAvatarChange(e) {
     return
   }
 
-  // 验证文件大小（2MB）
-  if (file.size > 2 * 1024 * 1024) {
-    ElMessage.error('图片大小不能超过 2MB')
+  // 验证文件大小（5MB）
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过 5MB')
     return
   }
 
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('userId', user.value.id)
+    const uploadData = new FormData()
+    uploadData.append('file', file)
+    // 不传 userId，后端从 token 获取
 
-    const response = await request.post('/user/avatar', formData, {
+    const response = await request.post('/user/avatar', uploadData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
 
     if (response.data.success || response.data.code === 200) {
-      // 更新本地用户信息
       userStore.setUserInfo({ ...user.value, avatar: response.data.avatar || response.data.data })
       ElMessage.success('头像更新成功')
     } else {
@@ -216,12 +204,16 @@ async function handleAvatarChange(e) {
     ElMessage.error('头像上传失败，请重试')
   }
 
-  // 清空 input
   e.target.value = ''
 }
 
 // 保存基本信息
 async function saveBasicInfo() {
+  if (!user.value?.id) {
+    ElMessage.error('用户信息异常，请重新登录')
+    return
+  }
+
   if (!formData.username?.trim()) {
     ElMessage.warning('用户名不能为空')
     return
@@ -230,16 +222,13 @@ async function saveBasicInfo() {
   saving.value = true
   try {
     const response = await request.put('/user/update', {
-      id: user.value.id,
-      username: formData.username.trim(),
-      signature: formData.signature?.trim() || ''
+      username: formData.username.trim()
     })
 
     if (response.data.success || response.data.code === 200) {
       userStore.setUserInfo({
         ...user.value,
-        username: formData.username.trim(),
-        signature: formData.signature?.trim() || ''
+        username: formData.username.trim()
       })
       ElMessage.success('保存成功')
     } else {
@@ -254,6 +243,11 @@ async function saveBasicInfo() {
 
 // 修改密码
 async function changePassword() {
+  if (!user.value?.id) {
+    ElMessage.error('用户信息异常，请重新登录')
+    return
+  }
+
   if (!passwordForm.oldPassword) {
     ElMessage.warning('请输入当前密码')
     return
@@ -270,14 +264,12 @@ async function changePassword() {
   changingPassword.value = true
   try {
     const response = await request.put('/user/password', {
-      id: user.value.id,
       oldPassword: passwordForm.oldPassword,
       newPassword: passwordForm.newPassword
     })
 
     if (response.data.success || response.data.code === 200) {
       ElMessage.success('密码修改成功')
-      // 清空表单
       passwordForm.oldPassword = ''
       passwordForm.newPassword = ''
       passwordForm.confirmPassword = ''
@@ -326,6 +318,8 @@ function formatDate(dateStr) {
   padding: 24px;
   max-width: 800px;
   margin: 0 auto;
+  height: 100%;
+  overflow: hidden;
 }
 
 .settings-header {

@@ -588,6 +588,8 @@ async function loadRecordsByGame(gameType) {
     padding: 20px;
     max-width: 1400px;
     margin: 0 auto;
+    height: 100%;
+    overflow: hidden;
 }
 
 .records-header {

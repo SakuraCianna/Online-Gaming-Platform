@@ -10,6 +10,7 @@ import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -22,6 +23,60 @@ public class UserController {
     private final UserMapper userMapper;
     private final FriendMapper friendMapper;
     private final HCaptchaUtil hCaptchaUtil;
+
+    /**
+     * 从 Authorization header 解析用户ID
+     */
+    private Long getUserIdFromToken(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new RuntimeException("缺少有效的认证token");
+        }
+        String token = authHeader.substring(7);
+        Claims claims = JwtUtil.verifyToken(token);
+        return Long.parseLong(claims.getSubject());
+    }
+
+    /**
+     * 上传头像
+     */
+    @PostMapping("/avatar")
+    public ResponseEntity<Map<String, Object>> uploadAvatar(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam("file") MultipartFile file) {
+        Long userId = getUserIdFromToken(authHeader);
+        Map<String, Object> result = userService.uploadAvatar(userId, file);
+        result.put("code", 200);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 更新用户信息
+     */
+    @PutMapping("/update")
+    public ResponseEntity<Map<String, Object>> updateUser(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody Map<String, Object> request) {
+        Long userId = getUserIdFromToken(authHeader);
+        String username = (String) request.get("username");
+        Map<String, Object> result = userService.updateUserInfo(userId, username);
+        result.put("code", 200);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 修改密码
+     */
+    @PutMapping("/password")
+    public ResponseEntity<Map<String, Object>> changePassword(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody Map<String, Object> request) {
+        Long userId = getUserIdFromToken(authHeader);
+        String oldPassword = (String) request.get("oldPassword");
+        String newPassword = (String) request.get("newPassword");
+        Map<String, Object> result = userService.changePassword(userId, oldPassword, newPassword);
+        result.put("code", 200);
+        return ResponseEntity.ok(result);
+    }
 
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, Object> request) {

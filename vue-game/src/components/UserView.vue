@@ -236,9 +236,8 @@ function initAnimation() {
 .main-content {
   flex: 1;
   padding: 30px;
-  overflow-y: auto;
-  /* 调整高度，因为没有header了 */
-  height: 100vh;
+  overflow: hidden;
+  height: 100%;
 }
 
 /* 页面切换动画 - 使用优化的 cubic-bezier 曲线 */
@@ -296,6 +295,7 @@ function initAnimation() {
   .main-content {
     padding: 16px;
     height: calc(100vh - 70px);
+    overflow: hidden;
   }
 
   /* 移动端动画调整 */
