@@ -3,13 +3,17 @@ package com.game.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.entity.GameRoom;
 import com.game.entity.Gomoku;
+import com.game.service.WebSocketSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -20,6 +24,20 @@ public class WebSocketController {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final WebSocketSessionService sessionService;
+
+    /**
+     * 获取WebSocket连接统计信息
+     */
+    @GetMapping("/api/ws/stats")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getStats() {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("activeSessions", sessionService.getActiveSessionCount());
+        stats.put("onlineUsers", sessionService.getOnlineUserCount());
+        stats.put("timestamp", System.currentTimeMillis());
+        return ResponseEntity.ok(stats);
+    }
 
     /**
      * 处理玩家退出/认输消息
