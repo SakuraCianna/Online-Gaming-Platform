@@ -7,22 +7,24 @@ class WebSocketService {
     handlers = new Map()
     isConnected = false
     reconnectAttempts = 0
-    maxReconnectAttempts = 3
+    maxReconnectAttempts = 5
     baseReconnectDelay = 1000
     reconnectTimer = null
     onConnectionChange = null
     currentToken = null
     currentRoomCode = null
     currentCallbacks = {}
-    isReconnecting = false // 防止重复重连
+    isReconnecting = false
+    tokenRefreshCallback = null
 
     connect(token, callbacks = {}) {
         if (this.client?.connected) {
-            console.log('[WS] Already connected')
+            console.log('[WS] 已连接')
             return
         }
         this.currentToken = token
         this.currentCallbacks = callbacks
+        this.tokenRefreshCallback = callbacks.onTokenRefresh || null
         this.reconnectAttempts = 0
         this.isReconnecting = false
         this._createClient(token, callbacks)
@@ -33,16 +35,15 @@ class WebSocketService {
             try { this.client.deactivate() } catch (e) { /* ignore */ }
         }
 
-        const socketFactory = () => new SockJS(`/ws?token=${token}`)
-
         this.client = new Client({
-            webSocketFactory: socketFactory,
+            webSocketFactory: () => new SockJS('/ws'),
+            connectHeaders: { Authorization: `Bearer ${token}` },
             heartbeatIncoming: 10000,
             heartbeatOutgoing: 10000,
             reconnectDelay: 0,
 
             onConnect: () => {
-                console.log('[WS] Connected')
+                console.log('[WS] 连接成功')
                 this.isConnected = true
                 this.reconnectAttempts = 0
                 this.isReconnecting = false
@@ -53,7 +54,7 @@ class WebSocketService {
             },
 
             onDisconnect: (frame) => {
-                console.log('[WS] Disconnected', frame)
+                console.log('[WS] 连接断开', frame)
                 this.isConnected = false
                 this._notifyConnectionChange(false)
                 this._attemptReconnect(this.currentCallbacks)
@@ -61,15 +62,18 @@ class WebSocketService {
             },
 
             onStompError: (frame) => {
-                console.error('[WS] STOMP Error:', frame)
+                console.error('[WS] STOMP错误:', frame)
+                if (frame.headers?.message?.includes('401') || 
+                    frame.headers?.message?.includes('Unauthorized')) {
+                    this._handleAuthError(callbacks)
+                }
                 callbacks.onStompError?.(frame)
             },
 
             onWebSocketError: (error) => {
-                console.error('[WS] WebSocket Error:', error)
+                console.error('[WS] 连接错误:', error)
                 this.isConnected = false
                 this._notifyConnectionChange(false)
-                // 不在这里重连，让onDisconnect统一处理
                 callbacks.onWebSocketError?.(error)
             },
 
@@ -82,15 +86,31 @@ class WebSocketService {
         this.client.activate()
     }
 
+    async _handleAuthError(callbacks) {
+        console.log('[WS] 认证失败，尝试刷新Token')
+        if (this.tokenRefreshCallback) {
+            try {
+                const newToken = await this.tokenRefreshCallback()
+                if (newToken) {
+                    this.currentToken = newToken
+                    console.log('[WS] Token刷新成功，正在重连')
+                    this._createClient(newToken, callbacks)
+                    return
+                }
+            } catch (e) {
+                console.error('[WS] Token刷新失败:', e)
+            }
+        }
+        callbacks.onAuthError?.()
+    }
 
     _attemptReconnect(callbacks) {
-        // 防止重复重连
         if (this.isReconnecting) {
-            console.log('[WS] Already reconnecting, skip')
+            console.log('[WS] 正在重连中，跳过')
             return
         }
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('[WS] Max reconnect attempts reached')
+            console.error('[WS] 已达最大重连次数')
             this.isReconnecting = false
             callbacks.onReconnectFailed?.()
             return
@@ -100,10 +120,24 @@ class WebSocketService {
         this.isReconnecting = true
         this.reconnectAttempts++
         const delay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
-        console.log(`[WS] Reconnecting in ${delay/1000}s (attempt ${this.reconnectAttempts})`)
+        console.log(`[WS] ${delay/1000}秒后重连 (第${this.reconnectAttempts}次)`)
         callbacks.onReconnecting?.(this.reconnectAttempts, delay)
-        this.reconnectTimer = setTimeout(() => {
-            if (this.currentToken) this._createClient(this.currentToken, callbacks)
+        
+        this.reconnectTimer = setTimeout(async () => {
+            if (this.currentToken) {
+                if (this.tokenRefreshCallback && this.reconnectAttempts > 1) {
+                    try {
+                        const newToken = await this.tokenRefreshCallback()
+                        if (newToken) {
+                            this.currentToken = newToken
+                            console.log('[WS] 重连前Token刷新成功')
+                        }
+                    } catch (e) {
+                        console.warn('[WS] Token刷新失败，使用现有Token')
+                    }
+                }
+                this._createClient(this.currentToken, callbacks)
+            }
         }, delay)
     }
 
@@ -113,25 +147,17 @@ class WebSocketService {
 
     async _recoverGameState() {
         if (!this.currentRoomCode || !this.client?.connected) return
-        console.log('[WS] Recovering game state:', this.currentRoomCode)
+        console.log('[WS] 恢复游戏状态:', this.currentRoomCode)
         try {
             this.send(`/app/room/${this.currentRoomCode}/recover`, { timestamp: Date.now() })
         } catch (error) {
-            console.error('[WS] Recovery failed:', error)
+            console.error('[WS] 恢复失败:', error)
         }
     }
 
-    setCurrentRoom(roomCode) {
-        this.currentRoomCode = roomCode
-    }
-
-    clearCurrentRoom() {
-        this.currentRoomCode = null
-    }
-
-    setConnectionChangeCallback(callback) {
-        this.onConnectionChange = callback
-    }
+    setCurrentRoom(roomCode) { this.currentRoomCode = roomCode }
+    clearCurrentRoom() { this.currentRoomCode = null }
+    setConnectionChangeCallback(callback) { this.onConnectionChange = callback }
 
     subscribe(topic, handler) {
         this.handlers.set(topic, handler)
@@ -142,7 +168,7 @@ class WebSocketService {
                 const subscription = this.client.subscribe(topic, handler)
                 this.subscriptions.set(topic, subscription)
             } catch (error) {
-                console.error('[WS] Subscribe failed:', topic, error)
+                console.error('[WS] 订阅失败:', topic, error)
             }
         }
     }
@@ -158,14 +184,14 @@ class WebSocketService {
 
     send(destination, body) {
         if (!this.client?.connected) {
-            console.error('[WS] Send failed: not connected', destination)
+            console.error('[WS] 发送失败: 未连接', destination)
             return false
         }
         try {
             this.client.publish({ destination, body: JSON.stringify(body) })
             return true
         } catch (error) {
-            console.error('[WS] Send error:', destination, error)
+            console.error('[WS] 发送错误:', destination, error)
             return false
         }
     }
@@ -176,7 +202,7 @@ class WebSocketService {
             await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)))
             if (!this.client?.connected) await new Promise(resolve => setTimeout(resolve, 1000))
         }
-        console.error('[WS] Send failed after retries:', destination)
+        console.error('[WS] 重试后仍发送失败:', destination)
         return false
     }
 
@@ -187,13 +213,12 @@ class WebSocketService {
                 const subscription = this.client.subscribe(topic, handler)
                 this.subscriptions.set(topic, subscription)
             } catch (error) {
-                console.error('[WS] Resubscribe failed:', topic, error)
+                console.error('[WS] 重新订阅失败:', topic, error)
             }
         }
     }
 
     disconnect() {
-        // 停止重连
         this.isReconnecting = false
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer)

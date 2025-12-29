@@ -73,7 +73,9 @@ public class WebSocketRateLimitInterceptor implements ChannelInterceptor {
      */
     private boolean checkRateLimit(Long userId) {
         if (userId == null) {
-            return true; // 未登录用户放行（握手阶段会拦截）
+            // 未登录用户直接拒绝（安全优先）
+            log.warn("限流拦截: userId为空，拒绝消息");
+            return false;
         }
         
         String key = RATE_LIMIT_KEY_PREFIX + userId;

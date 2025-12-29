@@ -9,6 +9,7 @@ import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
@@ -28,10 +29,22 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         }
 
         HttpServletRequest servletRequest = ((ServletServerHttpRequest) request).getServletRequest();
-        String token = servletRequest.getParameter("token");
+        
+        // 优先从 Authorization header 获取 token（更安全）
+        String token = null;
+        String authHeader = servletRequest.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7);
+        }
+        
+        // 兼容：如果 header 中没有，尝试从 URL 参数获取（向后兼容）
+        if (token == null || token.trim().isEmpty()) {
+            token = servletRequest.getParameter("token");
+        }
 
         // 检查token是否存在
         if (token == null || token.trim().isEmpty()) {
+            log.warn("WebSocket握手失败: 缺少token");
             return false;
         }
 
@@ -40,7 +53,8 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             Long userId = JwtUtil.getUserIdFromToken(token);
 
             // 检查userId是否有效
-            if (userId <= 0) {
+            if (userId == null || userId <= 0) {
+                log.warn("WebSocket握手失败: 无效的userId");
                 return false;
             }
 
@@ -49,16 +63,16 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             return true;
 
         } catch (ExpiredJwtException e) {
-            log.error("❌ WebSocket握手失败: JWT token已过期", e);
+            log.warn("WebSocket握手失败: JWT token已过期");
             return false;
         } catch (MalformedJwtException e) {
-            log.error("❌ WebSocket握手失败: JWT token格式错误", e);
+            log.warn("WebSocket握手失败: JWT token格式错误");
             return false;
-        } catch (io.jsonwebtoken.security.SignatureException e) { // <--- 修改后的 catch 块
-            log.error("❌ WebSocket握手失败: JWT签名验证失败", e);
+        } catch (io.jsonwebtoken.security.SignatureException e) {
+            log.warn("WebSocket握手失败: JWT签名验证失败");
             return false;
         } catch (Exception e) {
-            log.error("❌ WebSocket握手失败: token验证异常", e);
+            log.error("WebSocket握手失败: token验证异常", e);
             return false;
         }
     }
@@ -67,9 +81,9 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
     public void afterHandshake(@NonNull ServerHttpRequest request,
             @NonNull ServerHttpResponse response,
             @NonNull WebSocketHandler wsHandler,
-            Exception exception) {
+            @Nullable Exception exception) {
         if (exception != null) {
-            log.error("❌ WebSocket握手后发生异常", exception);
+            log.error("WebSocket握手后发生异常", exception);
         }
     }
 }
