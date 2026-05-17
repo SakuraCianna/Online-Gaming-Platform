@@ -16,3 +16,8 @@ Thumbs.db
 .kiro
 .cursor
 .windsurf
+
+# 环境变量配置文件（包含敏感信息）
+.env
+.env.local
+.env.*.local
